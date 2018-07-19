@@ -1,3 +1,10 @@
+/**
+ * Author:    TOSUKUi
+ * Created:   7.16.2018
+ * 
+ * (c) Copyright by TOSUKUi.
+ **/
+
 function onOpen(){
     SpreadsheetApp.getUi()
         .createMenu('botControl')

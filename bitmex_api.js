@@ -1,3 +1,11 @@
+/**
+ * Author:    TOSUKUi
+ * Created:   7.16.2018
+ * 
+ * (c) Copyright by TOSUKUi.
+ **/
+
+
 function marketOrder(api, side, orderQty){
   var path = "/api/v1/order";
   var params = {"symbol": "XBTUSD", "side": side, "orderQty": orderQty, "ordType": "Market"};
