@@ -6,7 +6,7 @@ This bot is system trade bot which demand on tradingview alert system.
 
 https://docs.google.com/spreadsheets/d/1ZW40cxA9CG-f9ZrT7KrCdrgkmxvkIc3rd_EM9S3Jx4o/edit?usp=sharing
 
-なにかエラー起きたらissueを上げていただければなる早で対応します。
+なにかエラー起きたらissueを上げていただければ助かります。
 
 一応使い方をまとめますと、
 1. 「調整項目」でポジションサイズ, ピラミッディングの設定
