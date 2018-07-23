@@ -1,11 +1,3 @@
-/**
- * Author:    TOSUKUi
- * Created:   7.16.2018
- * 
- * (c) Copyright by TOSUKUi.
- **/
-
-
 function bot() {
   var raw_op= checkGmailUpdate();
   if(raw_op) {
