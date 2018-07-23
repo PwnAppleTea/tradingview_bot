@@ -42,6 +42,7 @@ function orderFlow(api, op, config){
           order[0] = marketCloseOrder(api, op)
           sheet.getRange(2,1).setValue(0)
           order[1] = marketOrder(api, op, config["orderQty"])
+          sheet.getRange(2,1).setValue(1)
         }
       }else if(currentQty > 0){
         if(op == "Buy"){
@@ -53,6 +54,7 @@ function orderFlow(api, op, config){
           order[0] = marketCloseOrder(api, op)
           sheet.getRange(2,1).setValue(0)
           order[1] = marketOrder(api, op, config["orderQty"])
+          sheet.getRange(2,1).setValue(1)
         }
       }
     }else if(currentQty == 0){
