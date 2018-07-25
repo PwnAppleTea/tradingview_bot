@@ -1,5 +1,5 @@
 function bot() {
-  var raw_op= checkGmailUpdate();
+  var raw_op = checkGmailUpdate();
   if(raw_op) {
     //threads[0].markRead();
     var api = apiCredential();
@@ -13,6 +13,9 @@ function bot() {
     Logger.log(order)
     if(order.length > 0){
       appendOrder(order, op)
+      if (config["slackUrl"] != ""){
+        sendSlackNotify(config["slackUrl"], order)
+      }
     }
   }
 }
@@ -93,8 +96,8 @@ function parseMessage(message){
 function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
-  var config = sheet.getRange(2,1,1,2).getValues()[0]
-  return {"orderQty": config[0], "pyramidding": config[1]}
+  var config = sheet.getRange(2,1,1,3).getValues()[0]
+  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2]}
 }
 
 function apiCredential(){
@@ -114,4 +117,17 @@ function appendOrder(order, op){
     var header = h[0]
     sheet.appendRow([orderObj[header[0]], orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], op])
   }
+}
+
+
+function sendSlackNotify(slackUrl, message){
+  params = {text: message}
+  option = {
+    payload: params,
+    method: "POST",
+    header: {
+      "Content-type": "application/json"
+    }
+  }
+  return UrlFetchApp.fetch(slackUrl, option)
 }
