@@ -2,19 +2,25 @@ function bot() {
   var raw_op = checkGmailUpdate();
   if(raw_op) {
     //threads[0].markRead();
-    var api = apiCredential();
     var config = configration();
+    var api = apiCredential(config["test"]);
     var op = parseOperation(raw_op)
+    
     if(op=="Close"){
-      var order = marketCloseOrder(api, op)
+      var order = marketCloseOrder(api, config["test"])
+      var sheet = SpreadsheetApp.getActive().getSheetByName("稼働状況")
+      sheet.getRange(2,1).setValue(0)
     }else{
       var order = orderFlow(api, op, config)
     }
-    Logger.log(order)
+
     if(order.length > 0){
       appendOrder(order, op)
       if (config["slackUrl"] != ""){
-        sendSlackNotify(config["slackUrl"], order)
+        for(var i=0;i < order.length; i++){
+          var message = formatSlackMessage(order[i], op, config["test"])
+          sendSlackNotify(config["slackUrl"], message)
+        }
       }
     }
   }
@@ -26,43 +32,46 @@ function orderFlow(api, op, config){
   var numPyramidding = sheet.getRange(2,1).getValue()
   var pyramidding = config["pyramidding"]
   Logger.log("現状ピラミッディング数:" + numPyramidding)
-  var response = getPosition(api)
+  var response = getPosition(api, config["test"])
   var position = JSON.parse(response)
-  var currentQty = position[0]["currentQty"]
+  var currentQty = 0
+  if(position != []){
+    currentQty = position[0]["currentQty"]
+  }
   var order = []
   if(op=="Close"){
-    var order = marketCloseOrder(api, op);
+    var order = marketCloseOrder(api, op, config["test"]);
     sheet.getRange(2,1).setValue(0)
   }else{
     if(currentQty != 0){
       if(currentQty < 0){
         if(op == "Sell"){
           if(numPyramidding < pyramidding){
-            order[0] = marketOrder(api, op, config["orderQty"])
+            order[0] = marketOrder(api, op, config["orderQty"], config["test"])
             sheet.getRange(2,1).setValue(numPyramidding + 1)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == buy
-          order[0] = marketCloseOrder(api, op)
+          order[0] = marketCloseOrder(api, config["test"])
           sheet.getRange(2,1).setValue(0)
-          order[1] = marketOrder(api, op, config["orderQty"])
+          order[1] = marketOrder(api, op, config["orderQty"], config["test"])
           sheet.getRange(2,1).setValue(1)
         }
       }else if(currentQty > 0){
         if(op == "Buy"){
           if(numPyramidding < pyramidding){
-            order[0] = marketOrder(api, op, config["orderQty"])
+            order[0] = marketOrder(api, op, config["orderQty"], config["test"])
             sheet.getRange(2,1).setValue(numPyramidding + 1)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == Sell
-          order[0] = marketCloseOrder(api, op)
+          order[0] = marketCloseOrder(api, config["test"])
           sheet.getRange(2,1).setValue(0)
-          order[1] = marketOrder(api, op, config["orderQty"])
+          order[1] = marketOrder(api, op, config["orderQty"], config["test"])
           sheet.getRange(2,1).setValue(1)
         }
       }
-    }else if(currentQty == 0){
+    }else{
       sheet.getRange(2,1).setValue(numPyramidding + 1)
-      order[0] = marketOrder(api, op, config["orderQty"])
+      order[0] = marketOrder(api, op, config["orderQty"], config["test"])
     }
   }
   return order
@@ -71,9 +80,9 @@ function orderFlow(api, op, config){
 function checkGmailUpdate(){
   var messages = GmailApp.search("from:noreply@tradingview.com is:unread");
   if(messages.length < 1){return null}
+  messages[0].markRead()
   var new_massage = messages[0].getMessages()
   var message = parseMessage(new_massage[0].getBody())
-  messages[0].markRead()
   return message;
 }
 
@@ -96,12 +105,19 @@ function parseMessage(message){
 function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
-  var config = sheet.getRange(2,1,1,3).getValues()[0]
-  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2]}
+  var config = sheet.getRange(2,1,1,4).getValues()[0]
+  if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
+  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2], "test": config[3]}
 }
 
-function apiCredential(){
-  var sheet = SpreadsheetApp.getActive().getSheetByName("API資格情報");
+function apiCredential(test){
+  var sheet = ""
+  if(test=="test"){
+    sheet = SpreadsheetApp.getActive().getSheetByName("API資格情報_test");
+  }else if(test=="main"){
+    sheet = SpreadsheetApp.getActive().getSheetByName("API資格情報");
+  }
+  
   var values = sheet.getRange(1, 1, 2, 3).getValues();
   if(values[1][1] == "" || values[1][2] == ""){throw "APIキーまたはAPISecretがありません"};
   return {"apiKey": values[1][1], "apiSecret": values[1][2]}
@@ -109,7 +125,7 @@ function apiCredential(){
 
 function appendOrder(order, op){
   Logger.log(order)
-  for(i=0; i < order.length; i++){
+  for(var i=0; i < order.length; i++){
     var orderObj = JSON.parse(order[i])
     var spreadSheet = SpreadsheetApp.getActive()
     var sheet = spreadSheet.getSheetByName("処理結果")
@@ -119,15 +135,11 @@ function appendOrder(order, op){
   }
 }
 
-
-function sendSlackNotify(slackUrl, message){
-  params = {text: message}
-  option = {
-    payload: params,
-    method: "POST",
-    header: {
-      "Content-type": "application/json"
-    }
-  }
-  return UrlFetchApp.fetch(slackUrl, option)
+function formatSlackMessage(order, op, test){
+  var obj = JSON.parse(order)
+  var symbol = obj["symbol"]
+  var orderQty = obj["orderQty"]
+  var price = obj["price"]
+  var message = test + " " + op + " in " + symbol + " amount " + orderQty + " price at " + price
+  return message
 }
