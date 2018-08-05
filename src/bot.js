@@ -40,42 +40,71 @@ function orderFlow(api, op, config){
   }
   var order = []
   if(op=="Close"){
-    var order = marketCloseOrder(api, op, config["test"]);
+    order[0] = marketCloseOrder(api, op, config["test"]);
     sheet.getRange(2,1).setValue(0)
   }else{
     if(currentQty != 0){
       if(currentQty < 0){
         if(op == "Sell"){
           if(numPyramidding < pyramidding){
-            order[0] = marketOrder(api, op, config["orderQty"], config["test"])
-            sheet.getRange(2,1).setValue(numPyramidding + 1)
+            order = order(api, config, op, sheet, order, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == buy
-          order[0] = marketCloseOrder(api, config["test"])
-          sheet.getRange(2,1).setValue(0)
-          order[1] = marketOrder(api, op, config["orderQty"], config["test"])
-          sheet.getRange(2,1).setValue(1)
+          order = dotenOrder(api, config, op, sheet, order)
         }
       }else if(currentQty > 0){
         if(op == "Buy"){
           if(numPyramidding < pyramidding){
-            order[0] = marketOrder(api, op, config["orderQty"], config["test"])
-            sheet.getRange(2,1).setValue(numPyramidding + 1)
+            order = order(api, config, op, sheet, order, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == Sell
-          order[0] = marketCloseOrder(api, config["test"])
-          sheet.getRange(2,1).setValue(0)
-          order[1] = marketOrder(api, op, config["orderQty"], config["test"])
-          sheet.getRange(2,1).setValue(1)
+          order = dotenOrder(api, config, op, sheet, order)
         }
       }
     }else{
-      sheet.getRange(2,1).setValue(numPyramidding + 1)
-      order[0] = marketOrder(api, op, config["orderQty"], config["test"])
+      order = order(api, config, op, sheet, order, 0)
     }
   }
   return order
 }
+
+function dotenOrder(api, config, op, sheet, order){
+  order[0] = marketCloseOrder(api, config["test"])
+  sheet.getRange(2,1).setValue(0)
+  order[1] = marketOrder(api, op, config["orderQty"], config["test"])
+  sheet.getRange(2,1).setValue(1)
+  stopOrder(api, config, reverseBuySell(op))
+  return order
+}
+
+function order(api, config, op, sheet, order, numPyramidding){
+  order[0] = marketOrder(api, op, config["orderQty"], config["test"])
+  sheet.getRange(2,1).setValue(numPyramidding + 1)
+  stopOrder(api, config, reverseBuySell(op))
+  return order
+}
+
+function stopOrder(api, config, op){
+  if(["None", ""].indexOf(config["stopType"]) >= 0){
+    var pegOffset = config["stopOffset"]
+    if(op == "Sell"){
+      pegOffset = -pegOffset
+    }
+    return marketStopOrder(api, op, pegOffset, config["stopType"], config["orderQty"], config["test"])
+  }else{
+    return
+  }
+}
+
+function reverseBuySell(buySell){
+  if(buySell == "Buy"){
+    return "Sell"
+  }else{
+    return "Buy"
+  }
+}
+
+
  
 function checkGmailUpdate(){
   var messages = GmailApp.search("from:noreply@tradingview.com is:unread");
@@ -105,9 +134,9 @@ function parseMessage(message){
 function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
-  var config = sheet.getRange(2,1,1,4).getValues()[0]
+  var config = sheet.getRange(2,1,1,6).getValues()[0]
   if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
-  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2], "test": config[3]}
+  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2], "test": config[3], "stopType": config[4], "stopOffset": config[5]}
 }
 
 function apiCredential(test){
