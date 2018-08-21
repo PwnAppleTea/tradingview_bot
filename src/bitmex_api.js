@@ -44,7 +44,7 @@ function sendRequest(api, params, method, path, numResend, test){
         "api-key": api.apiKey, 
         },
         "method": method, 
-        "muteHttpExceptions": false
+        "muteHttpExceptions": true
     }
     if(method=="POST"){
         var payload = params
@@ -59,13 +59,28 @@ function sendRequest(api, params, method, path, numResend, test){
         var signature = makeSignature(api.apiSecret, method, nonce, query, payload)
         option["headers"]["api-signature"] = signature
     }
-    try{
-        var response = UrlFetchApp.fetch(api_url+query, option)
-        return response
-    }catch(e){
-        Utilities.sleep(10000)
-        Logger.log(e)
-        return sendRequest(api, params, method, path, numResend+1, test)
+    var response = UrlFetchApp.fetch(api_url+query, option)
+    if(checkHttpError(response) == "Resend"){
+        if(numResend < 10)
+        sleep(500)
+        sendRequest(api, params, method, path, numResend + 1, test)
+    }
+    return response
+}
+
+function checkHttpError(response){
+    res = JSON.parse(response)
+    code = response.getResponseCode()
+    if(code > 400){
+        if(code == 503){
+            return "Resend"
+        }else{
+            throw new HTTPException(res["error"]["message"], "HTTPCode" + code + ":" + res["error"]["name"])
+        }
     }
 }
 
+function HTTPException(message, name){
+    this.message = message
+    this.name = name
+  }
