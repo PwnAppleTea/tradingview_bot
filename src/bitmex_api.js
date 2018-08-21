@@ -61,9 +61,10 @@ function sendRequest(api, params, method, path, numResend, test){
     }
     var response = UrlFetchApp.fetch(api_url+query, option)
     if(checkHttpError(response) == "Resend"){
-        if(numResend < 10)
-        sleep(500)
-        sendRequest(api, params, method, path, numResend + 1, test)
+        if(numResend < 10){
+            sleep(500)
+            sendRequest(api, params, method, path, numResend + 1, test)
+        }
     }
     return response
 }
