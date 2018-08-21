@@ -1,30 +1,28 @@
 function bot() {
-  var raw_op = checkGmailUpdate();
-  if(raw_op) {
-    //threads[0].markRead();
-    var config = configration();
-    var api = apiCredential(config["test"]);
-    var op = parseOperation(raw_op)
-    
-    if(op=="Close"){
-      var order = marketCloseOrder(api, config["test"])
-      var sheet = SpreadsheetApp.getActive().getSheetByName("稼働状況")
-      sheet.getRange(2,1).setValue(0)
-    }else{
+  var config = configration();
+  try{
+    var raw_op = checkGmailUpdate();
+    if(raw_op) {
+      //threads[0].markRead();
+      var api = apiCredential(config["test"]);
+      var op = parseOperation(raw_op)
       var order = orderFlow(api, op, config)
-    }
-
-    if(order.length > 0){
-      appendOrder(order, op)
-      if (config["slackUrl"] != ""){
-        for(var i=0;i < order.length; i++){
-          var message = formatSlackMessage(order[i], op, config["test"])
-          sendSlackNotify(config["slackUrl"], message)
+      if(order.length > 0){
+        appendOrder(order, op)
+        if (config["slackUrl"] != ""){
+          for(var i=0;i < order.length; i++){
+            var message = formatSlackMessage(order[i], op, config["test"])
+            sendSlackNotify(config["slackUrl"], message)
+          }
         }
       }
     }
+  }catch(e){
+    sendSlackNotify(config["slackUrl"], e.name + ":" + e.message)
   }
 }
+
+
 
 function orderFlow(api, op, config){
   var spreadSheet = SpreadsheetApp.getActive()
@@ -135,7 +133,7 @@ function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
   var config = sheet.getRange(2,1,1,6).getValues()[0]
-  if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
+  //if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
   return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2], "test": config[3], "stopType": config[4], "stopOffset": config[5]}
 }
 

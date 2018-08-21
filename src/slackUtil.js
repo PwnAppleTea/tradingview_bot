@@ -1,4 +1,5 @@
 function sendSlackNotify(slackUrl, message){
+    
     var params = {"text": message}
     var option = {
         "payload": JSON.stringify(params),
