@@ -1,12 +1,12 @@
 function makeSignature(apiSecret, verb, expires, path, payload){
-
-    if(payload == ""){
-      var source = verb + path + expires
-    }else{
-      var s_payload = JSON.stringify(payload)
-      var source = verb + path + expires + s_payload
-    }
-    return hex(Utilities.computeHmacSha256Signature(source, apiSecret))    
+  
+  if(payload == ""){
+    var source = verb + path + expires
+  }else{
+    var s_payload = JSON.stringify(payload)
+    var source = verb + path + expires + s_payload
+  }
+  return hex(Utilities.computeHmacSha256Signature(source, apiSecret))    
 }
 
 function hex(signature){

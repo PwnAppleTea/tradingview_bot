@@ -23,60 +23,61 @@ function bot() {
 }
 
 
-
 function orderFlow(api, op, config){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("稼働状況")
   var numPyramidding = sheet.getRange(2,1).getValue()
   var pyramidding = config["pyramidding"]
   Logger.log("現状ピラミッディング数:" + numPyramidding)
-  var response = getPosition(api, config["test"])
+  var response = getPosition(api, config["symbol"], config["test"])
   var position = JSON.parse(response)
   var currentQty = 0
-  if(position != []){
+  
+  if(position.length > 0){
     currentQty = position[0]["currentQty"]
   }
-  var order = []
+  var ord = []
   if(op=="Close"){
-    order[0] = marketCloseOrder(api, op, config["test"]);
+    ord[0] = marketCloseOrder(api, config["symbol"], config["test"]);
     sheet.getRange(2,1).setValue(0)
   }else{
     if(currentQty != 0){
       if(currentQty < 0){
         if(op == "Sell"){
           if(numPyramidding < pyramidding){
-            order = order(api, config, op, sheet, order, numPyramidding)
+            ord = order(api, config, op, sheet, ord, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == buy
-          order = dotenOrder(api, config, op, sheet, order)
+          ord = dotenOrder(api, config, op, sheet, ord)
         }
       }else if(currentQty > 0){
         if(op == "Buy"){
           if(numPyramidding < pyramidding){
-            order = order(api, config, op, sheet, order, numPyramidding)
+            ord = order(api, config, op, sheet, ord, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == Sell
-          order = dotenOrder(api, config, op, sheet, order)
+          ord = dotenOrder(api, config, op, sheet, ord)
         }
       }
     }else{
-      order = order(api, config, op, sheet, order, 0)
+      ord = order(api, config, op, sheet, ord, 0)
     }
   }
-  return order
+  return ord
 }
 
 function dotenOrder(api, config, op, sheet, order){
-  order[0] = marketCloseOrder(api, config["test"])
+  Logger.log(config)
+  order[0] = marketCloseOrder(api, config["symbol"], config["test"])
   sheet.getRange(2,1).setValue(0)
-  order[1] = marketOrder(api, op, config["orderQty"], config["test"])
+  order[1] = marketOrder(api, config["symbol"], op, config["orderQty"], config["test"])
   sheet.getRange(2,1).setValue(1)
   stopOrder(api, config, reverseBuySell(op))
   return order
 }
 
 function order(api, config, op, sheet, order, numPyramidding){
-  order[0] = marketOrder(api, op, config["orderQty"], config["test"])
+  order[0] = marketOrder(api, config["symbol"], op, config["orderQty"], config["test"])
   sheet.getRange(2,1).setValue(numPyramidding + 1)
   stopOrder(api, config, reverseBuySell(op))
   return order
@@ -88,7 +89,7 @@ function stopOrder(api, config, op){
     if(op == "Sell"){
       pegOffset = -pegOffset
     }
-    return marketStopOrder(api, op, pegOffset, config["stopType"], config["orderQty"], config["test"])
+    return marketStopOrder(api, config["symbol"], op, pegOffset, config["stopType"], config["orderQty"], config["test"])
   }else{
     return
   }
@@ -103,7 +104,7 @@ function reverseBuySell(buySell){
 }
 
 
- 
+
 function checkGmailUpdate(){
   var messages = GmailApp.search("from:noreply@tradingview.com is:unread");
   if(messages.length < 1){return null}
@@ -132,9 +133,16 @@ function parseMessage(message){
 function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
-  var config = sheet.getRange(2,1,1,6).getValues()[0]
+  var configValues = sheet.getRange(1,1,2,7).getValues()
+  var headers = configValues[0]
+  var config = configValues[1]
   //if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
-  return {"orderQty": config[0], "pyramidding": config[1], "slackUrl": config[2], "test": config[3], "stopType": config[4], "stopOffset": config[5]}
+  var output = {}
+  for(var i=0; i < headers.length; i++){
+    output[headers[i]] = config[i]
+  }
+  Logger.log(output)
+  return output
 }
 
 function apiCredential(test){
