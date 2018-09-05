@@ -77,6 +77,7 @@ function sendRequest(api, params, method, path, numResend, test){
       sendRequest(api, params, method, path, numResend + 1, test)
     }
   }
+  
   return response
 }
 
