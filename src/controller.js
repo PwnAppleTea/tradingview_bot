@@ -1,10 +1,10 @@
 function onOpen(){
-    SpreadsheetApp.getUi()
-        .createMenu('botControl')
-        .addItem('runbot', 'trigger')
-        .addItem('stopbot', 'delTrigger')
-        .addItem('testrun', 'bot')
-    .addToUi()
+  SpreadsheetApp.getUi()
+  .createMenu('botControl')
+  .addItem('Run bot', 'trigger')
+  .addItem('Stop bot', 'delTrigger')
+  .addItem('Test order', 'bot')
+  .addToUi()
 }
 
 function trigger(){
@@ -19,12 +19,12 @@ function trigger(){
 }
 
 function delTrigger(){
-    var triggers = ScriptApp.getProjectTriggers();
-    for(var i=0; i < triggers.length; i++) {
-        if (triggers[i].getHandlerFunction() == "bot") {
-        ScriptApp.deleteTrigger(triggers[i]);
-        }
+  var triggers = ScriptApp.getProjectTriggers();
+  for(var i=0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() == "bot") {
+      ScriptApp.deleteTrigger(triggers[i]);
     }
+  }
   var ss = SpreadsheetApp.getActive()
   var sheet = ss.getSheetByName("稼働状況")
   var status = sheet.getRange(2,2)
