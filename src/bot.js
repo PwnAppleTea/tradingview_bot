@@ -1,17 +1,26 @@
 function bot() {
-  var config = configration();
+  var configs = configration();
+  var mail = checkGmailUpdate();
+  if(!mail){return}
+  Logger.log(Object.keys(configs))
+  Object.keys(configs).forEach(function(key){
+    orderBot(configs[key], mail[key], key)
+  })
+}
+
+function orderBot(config, raw_op, symbol){
+  // var messenger = messaging(); 
   try{
-    var raw_op = checkGmailUpdate();
-    if(raw_op) {
+    if(raw_op && config["稼働"]) {
       //threads[0].markRead();
-      var api = apiCredential(config["test"]);
-      var op = parseOperation(raw_op)
+      var api = {"apiKey": config["APIkey"], "apiSecret": config["APIsecret"]}
+      var op = parseOperation(raw_op["operation"])
       var order = orderFlow(api, op, config)
       if(order.length > 0){
-        appendOrder(order, op)
+        appendOrder(order, op, symbol)
         if (config["slackUrl"] != ""){
           for(var i=0;i < order.length; i++){
-            var message = formatSlackMessage(order[i], op, config["test"])
+            var message = formatSlackMessage(symbol, order[i], op, config["テスト"])
             sendSlackNotify(config["slackUrl"], message)
           }
         }
@@ -27,9 +36,10 @@ function orderFlow(api, op, config){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("稼働状況")
   var numPyramidding = sheet.getRange(2,1).getValue()
-  var pyramidding = config["pyramidding"]
+  var pyramidding = config["最大ピラミッディング"]
   Logger.log("現状ピラミッディング数:" + numPyramidding)
-  var response = getPosition(api, config["symbol"], config["test"])
+  Logger.log("最大ピラミッディング数:" + pyramidding)
+  var response = getPosition(api, config["ticker"], config["テスト"])
   var position = JSON.parse(response)
   var currentQty = 0
   
@@ -38,7 +48,7 @@ function orderFlow(api, op, config){
   }
   var ord = []
   if(op=="Close"){
-    ord[0] = marketCloseOrder(api, config["symbol"], config["test"]);
+    ord[0] = marketCloseOrder(api, config["ticker"], config["テスト"]);
     sheet.getRange(2,1).setValue(0)
   }else{
     if(currentQty != 0){
@@ -68,28 +78,28 @@ function orderFlow(api, op, config){
 
 function dotenOrder(api, config, op, sheet, order){
   Logger.log(config)
-  order[0] = marketCloseOrder(api, config["symbol"], config["test"])
+  order[0] = marketCloseOrder(api, config["ticker"], config["テスト"])
   sheet.getRange(2,1).setValue(0)
-  order[1] = marketOrder(api, config["symbol"], op, config["orderQty"], config["test"])
+  order[1] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
   sheet.getRange(2,1).setValue(1)
   stopOrder(api, config, reverseBuySell(op))
   return order
 }
 
 function order(api, config, op, sheet, order, numPyramidding){
-  order[0] = marketOrder(api, config["symbol"], op, config["orderQty"], config["test"])
+  order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
   sheet.getRange(2,1).setValue(numPyramidding + 1)
   stopOrder(api, config, reverseBuySell(op))
   return order
 }
 
 function stopOrder(api, config, op){
-  if(["None", ""].indexOf(config["stopType"]) >= 0){
-    var pegOffset = config["stopOffset"]
+  if(["None", ""].indexOf(config["ストップロスタイプ"]) >= 0){
+    var pegOffset = config["ストップのポジションとの差"]
     if(op == "Sell"){
       pegOffset = -pegOffset
     }
-    return marketStopOrder(api, config["symbol"], op, pegOffset, config["stopType"], config["orderQty"], config["test"])
+    return marketStopOrder(api, config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], config["テスト"])
   }else{
     return
   }
@@ -103,15 +113,26 @@ function reverseBuySell(buySell){
   }
 }
 
+function checkStopOrder(config, key){
+  
+  
+}
+
 
 
 function checkGmailUpdate(){
-  var messages = GmailApp.search("from:noreply@tradingview.com is:unread");
-  if(messages.length < 1){return null}
-  messages[0].markRead()
-  var new_massage = messages[0].getMessages()
-  var message = parseMessage(new_massage[0].getBody())
-  return message;
+  // return {symbol:{op: }}
+  var threads = GmailApp.search("from:noreply@tradingview.com is:unread");
+  if(threads.length < 1){return null}
+  mails = {}
+  threads.forEach(function(thread){
+    thread.getMessages().forEach(function(message){
+      mail = parseMessage(message.getBody())
+      mails[mail["symbol"]] = mail
+      message.markRead()
+    })    
+  })
+  return mails;
 }
 
 function parseOperation(op){
@@ -119,43 +140,41 @@ function parseOperation(op){
   return ops[op]
 }
 
-function parseMessage(message){
-  var regexp = /strategy-operation:.*?:strategy-operation/
-  var match = regexp.exec(message)
-  if(match == null){throw "operation format in the mail is invalid"}
-  var operation_part = match[0]
+function parseMessage(message, strategySymbol){
+  var permit = ["Long", "Short", "Close"]
+  var regexpOp = /strategy-operation:.*?:strategy-operation/
+  var regexpSymbol = /strategy-symbol:.*?:strategy-symbol/
+  var op = regexpOp.exec(message)
+  var sym = regexpSymbol.exec(message)
+  if(op == null || sym == null){throw new MailError("アラートメールのフォーマットが間違っている可能性があります")}
+  var operation_part = op[0]
+  var symbol_part = sym[0]
   var operation = operation_part.replace(/strategy-operation:/, "");
-  var operation = operation.replace(/:strategy-operation/, "");
-  if(!(["Long", "Short", "Close"].indexOf(operation) >= 0)){throw "Operation in the mail is invalid"}
-  return operation
+  operation = operation.replace(/:strategy-operation/, "");
+  var symbol = symbol_part.replace(/strategy-symbol:/, "")
+  symbol = symbol.replace(/:strategy-symbol/, "")
+  if(strategySymbol == symbol){return null}
+  if(permit.indexOf(operation) < 0){throw new MailError("メールのオペレーションが許可されてるものではありません。許可されているものは " + permit + "のみです")}
+  return {"operation": operation, "symbol": symbol}
 }
 
 function configration(){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("調整項目")
-  var configValues = sheet.getRange(1,1,2,7).getValues()
+  var configValues = sheet.getRange(1, 1, sheet.getLastRow(),sheet.getLastColumn()).getValues()
   var headers = configValues[0]
-  var config = configValues[1]
-  //if (config.indexOf("") >= 0){throw "some topics were not input to 調整項目"}
-  var output = {}
-  for(var i=0; i < headers.length; i++){
-    output[headers[i]] = config[i]
-  }
-  Logger.log(output)
-  return output
-}
-
-function apiCredential(test){
-  var sheet = ""
-  if(test=="test"){
-    sheet = SpreadsheetApp.getActive().getSheetByName("API資格情報_test");
-  }else if(test=="main"){
-    sheet = SpreadsheetApp.getActive().getSheetByName("API資格情報");
-  }
-  
-  var values = sheet.getRange(1, 1, 2, 3).getValues();
-  if(values[1][1] == "" || values[1][2] == ""){throw "APIキーまたはAPISecretがありません"};
-  return {"apiKey": values[1][1], "apiSecret": values[1][2]}
+  var configs = configValues.slice(1)
+  var configration = {}
+  // TODO マルチコンフィグ機能
+  configs.forEach(function(configlist){
+    configBody = configlist.slice(1)
+    configSymbol = configlist[0]
+    configration[configSymbol] = {}
+    for(var i=0; i<configBody.length; i++){
+      configration[configSymbol][headers[i+1]] = configBody[i]
+    }
+  })
+  return configration
 }
 
 function appendOrder(order, op){
@@ -166,15 +185,17 @@ function appendOrder(order, op){
     var sheet = spreadSheet.getSheetByName("処理結果")
     var h = sheet.getRange(1, 1, 1, 8).getValues()
     var header = h[0]
-    sheet.appendRow([orderObj[header[0]], orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], op])
+    sheet.appendRow([symbol, orderObj[header[0]], orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], op])
   }
 }
 
-function formatSlackMessage(order, op, test){
+function formatSlackMessage(strategy, order, op, test){
   var obj = JSON.parse(order)
   var symbol = obj["symbol"]
   var orderQty = obj["orderQty"]
   var price = obj["price"]
-  var message = test + " " + op + " in " + symbol + " amount " + orderQty + " price at " + price
+  var d = new Date()
+  var message = Utilities.formatDate(d,"JST","yyyy/MM/dd") + "[" + test + "]" + "Strategy " + strategy + ":" + op + " in " + symbol + " amount " + orderQty + " price at " + price
   return message
 }
+

@@ -4,8 +4,6 @@ function onOpen(){
   .addItem('Run bot', 'trigger')
   .addItem('Stop bot', 'delTrigger')
   .addItem('Test order', 'bot')
-  .addSeparator()
-  .addItem("メニューを開く", "openMenu")
   .addToUi()
 }
 
@@ -33,15 +31,6 @@ function delTrigger(){
   status.setValue("停止中")
 }
 
-
-function openMenu(){
-  // ui instance
-  var htmlOutput = HtmlService.createTemplateFromFile("view/index.html").evaluate().setTitle("ストラテジーを追加");  
-  SpreadsheetApp.getUi()
-  .showSidebar(htmlOutput)
-}
-
-
 function onEdit(){
   setValidateTicker()
 }
@@ -53,16 +42,14 @@ function setValidateTicker(){
    var platforms = reduceDim(pltsheet.getRange(2, 2, pltsheet.getLastRow()-1 ).getValues())
    var tickers = getTickers()
    var rules_ticker = {}
-   var rules_stoploss
    for(var i=0; i < platforms.length; i++){
      rules_ticker[platforms[i]] = SpreadsheetApp.newDataValidation().requireValueInList(tickers[platforms[i]])
-     rules
    }
    var platformConfig = reduceDim(config.getRange(2, 2, config.getLastRow() - 1).getValues())
    var targetCells = config.getRange(2, 10, config.getLastRow() - 1)
    var rulesCell = []
    for(var i=0; i < platformConfig.length; i++){
-     rulesCell[i] = [rules[platformConfig[i]]]
+     rulesCell[i] = [rules_ticker[platformConfig[i]]]
    }
    targetCells.setDataValidations(rulesCell)
 }
