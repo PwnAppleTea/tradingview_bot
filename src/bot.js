@@ -1,10 +1,11 @@
 function bot() {
   var configs = configration();
   var mail = checkGmailUpdate();
+  var statuses = getStatus();
   if(!mail){return}
   Logger.log(Object.keys(configs))
   Object.keys(configs).forEach(function(key){
-    orderBot(configs[key], mail[key], key)
+    orderBot(configs[key], mail[key], key, statuses[key])
   })
 }
 
@@ -15,7 +16,7 @@ function orderBot(config, raw_op, symbol){
       //threads[0].markRead();
       var api = {"apiKey": config["APIkey"], "apiSecret": config["APIsecret"]}
       var op = parseOperation(raw_op["operation"])
-      var order = orderFlow(api, op, config)
+      var order = orderFlow(api, op, config, status)
       if(order.length > 0){
         appendOrder(order, op, symbol)
         if (config["slackUrl"] != ""){
@@ -32,10 +33,11 @@ function orderBot(config, raw_op, symbol){
 }
 
 
-function orderFlow(api, op, config){
+function orderFlow(api, op, config, statuses){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName("稼働状況")
-  var numPyramidding = sheet.getRange(2,1).getValue()
+  //var numPyramidding = sheet.getRange(2,1).getValue()
+  var numPyramidding = statuses["現状ピラミッディング"]
   var pyramidding = config["最大ピラミッディング"]
   Logger.log("現状ピラミッディング数:" + numPyramidding)
   Logger.log("最大ピラミッディング数:" + pyramidding)
@@ -70,7 +72,7 @@ function orderFlow(api, op, config){
         }
       }
     }else{
-      ord = order(api, config, op, sheet, ord, 0)
+      ord = startOrder(api, config, op, sheet, ord, 0)
     }
   }
   return ord
@@ -89,6 +91,13 @@ function dotenOrder(api, config, op, sheet, order){
 function order(api, config, op, sheet, order, numPyramidding){
   order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
   sheet.getRange(2,1).setValue(numPyramidding + 1)
+  stopOrder(api, config, reverseBuySell(op))
+  return order
+}
+
+function startOrder(api, config, op, sheet, order, numPyramidding){
+  order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
+  sheet.getRange(2,1).setValue(1)
   stopOrder(api, config, reverseBuySell(op))
   return order
 }
@@ -114,7 +123,6 @@ function reverseBuySell(buySell){
 }
 
 function checkStopOrder(config, key){
-  
   
 }
 
@@ -159,22 +167,7 @@ function parseMessage(message, strategySymbol){
 }
 
 function configration(){
-  var spreadSheet = SpreadsheetApp.getActive()
-  var sheet = spreadSheet.getSheetByName("調整項目")
-  var configValues = sheet.getRange(1, 1, sheet.getLastRow(),sheet.getLastColumn()).getValues()
-  var headers = configValues[0]
-  var configs = configValues.slice(1)
-  var configration = {}
-  // TODO マルチコンフィグ機能
-  configs.forEach(function(configlist){
-    configBody = configlist.slice(1)
-    configSymbol = configlist[0]
-    configration[configSymbol] = {}
-    for(var i=0; i<configBody.length; i++){
-      configration[configSymbol][headers[i+1]] = configBody[i]
-    }
-  })
-  return configration
+  return getSymbolAndData("調整項目")
 }
 
 function appendOrder(order, op){
@@ -189,6 +182,10 @@ function appendOrder(order, op){
   }
 }
 
+function getStatus(){
+  return getSymbolAndData("ステータス")
+}
+
 function formatSlackMessage(strategy, order, op, test){
   var obj = JSON.parse(order)
   var symbol = obj["symbol"]
@@ -197,5 +194,24 @@ function formatSlackMessage(strategy, order, op, test){
   var d = new Date()
   var message = Utilities.formatDate(d,"JST","yyyy/MM/dd") + "[" + test + "]" + "Strategy " + strategy + ":" + op + " in " + symbol + " amount " + orderQty + " price at " + price
   return message
+}
+
+
+function getSymbolAndData(sheetName){
+  var spreadSheet = SpreadsheetApp.getActive()
+  var sheet = spreadSheet.getSheetByName(sheetName)
+  var dataValues = sheet.getRange(1, 1, sheet.getLastRow(),sheet.getLastColumn()).getValues()
+  var headers = dataValues[0]
+  var dataArray = configValues.slice(1)
+  var dataObj = {}
+  dataArray.forEach(function(datalist){
+    dataBody = datalist.slice(1)
+    dataSymbol = datalist[0]
+    dataObj[dataSymbol] = {}
+    for(var i=0; i<dataBody.length; i++){
+      dataObj[dataSymbol][headers[i+1]] = dataBody[i]
+    }
+  })
+  return dataObj
 }
 
