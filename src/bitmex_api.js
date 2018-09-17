@@ -27,7 +27,7 @@ function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQ
 
 
 function sendRequest(api, params, method, path, numResend, test){
-  if (numResend > 10){throw new HTTPException("HTTPError", "Too much resend requestf")}
+  if (numResend > 10){throw new HTTPException("Too much resend request")}
   var api_url = "";
   if(test=="test"){  
     api_url = "https://testnet.bitmex.com";
@@ -62,10 +62,8 @@ function sendRequest(api, params, method, path, numResend, test){
     }
   var response = UrlFetchApp.fetch(api_url+query, option)
   if(checkHttpError(response) == "Resend"){
-    if(numResend < 10){
-      Utilities.sleep(500)
-      sendRequest(api, params, method, path, numResend + 1, test)
-    }
+    Utilities.sleep(500)
+    return sendRequest(api, params, method, path, numResend + 1, test)
   }
   return response
 }
