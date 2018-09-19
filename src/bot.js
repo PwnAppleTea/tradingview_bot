@@ -72,7 +72,7 @@ function orderFlow(api, op, config, statuses){
         }
       }
     }else{
-      ord = startOrder(api, config, op, sheet, ord, 0)
+      ord = startOrder(api, config, op, sheet, ord)
     }
   }
   return ord

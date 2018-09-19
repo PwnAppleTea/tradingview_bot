@@ -1,3 +1,4 @@
+import "google-apps-script"
 function onOpen(){
   SpreadsheetApp.getUi()
   .createMenu('botControl')
@@ -9,13 +10,21 @@ function onOpen(){
 
 function trigger(){
   var ss = SpreadsheetApp.getActive()
-  var sheet = ss.getSheetByName("稼働状況")
-  var status = sheet.getRange(2,2)
-  if(status.getValue() == "稼働中"){
-    throw "botはすでに稼働中です"
+  var sheet = ss.getSheetByName("bot稼働状況")
+  var status = sheet.getRange(1,1)
+  var statusVal = status.getValue()
+  var botTrigger = undefined
+  for(var i=0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() == "bot") {
+      botTrigger = ScriptApp.deleteTrigger(triggers[i]);
+    }
   }
-  ScriptApp.newTrigger("bot").timeBased().everyMinutes(1).create();
-  status.setValue("稼働中")
+  if(statusVal == "稼働中" || botTrigger){
+    throw "botはすでに稼働中です。もし停止したい場合はStop Botを選択してください"
+  }else{
+    ScriptApp.newTrigger("bot").timeBased().everyMinutes(1).create();
+    status.setValue("稼働中")
+  }
 }
 
 function delTrigger(){
@@ -26,8 +35,8 @@ function delTrigger(){
     }
   }
   var ss = SpreadsheetApp.getActive()
-  var sheet = ss.getSheetByName("稼働状況")
-  var status = sheet.getRange(2,2)
+  var sheet = ss.getSheetByName("bot稼働状況")
+  var status = sheet.getRange(1,1)
   status.setValue("停止中")
 }
 
@@ -55,6 +64,7 @@ function setValidateTicker(){
 }
 
 function reduceDim(array){
+  // [[a], [b], [c]] to [a,b,c]
   output = []
   for(var i=0; i < array.length; i++){
     output.push(array[i][0])
