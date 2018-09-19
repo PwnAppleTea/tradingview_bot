@@ -1,4 +1,4 @@
-function lineNotify(accessToken, message){
+function sendLineNotify(accessToken, message){
     var url = "https://notify-api.line.me/api/notify"
     var payload = "message="  + message
     var params = {
