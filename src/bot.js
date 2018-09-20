@@ -183,7 +183,7 @@ function appendOrder(order, op){
 }
 
 function getStatus(){
-  return getSymbolAndData("ステータス")
+  return getSymbolAndData("戦略ステータス")
 }
 
 function formatSlackMessage(strategy, order, op, test){
@@ -202,7 +202,7 @@ function getSymbolAndData(sheetName){
   var sheet = spreadSheet.getSheetByName(sheetName)
   var dataValues = sheet.getRange(1, 1, sheet.getLastRow(),sheet.getLastColumn()).getValues()
   var headers = dataValues[0]
-  var dataArray = configValues.slice(1)
+  var dataArray = dataValues.slice(1)
   var dataObj = {}
   dataArray.forEach(function(datalist){
     dataBody = datalist.slice(1)

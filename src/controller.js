@@ -1,4 +1,3 @@
-import "google-apps-script"
 function onOpen(){
   SpreadsheetApp.getUi()
   .createMenu('botControl')
