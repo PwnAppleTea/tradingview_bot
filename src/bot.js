@@ -22,13 +22,13 @@ function orderBot(config, raw_op, symbol){
         if (config["slackUrl"] != ""){
           for(var i=0;i < order.length; i++){
             var message = formatSlackMessage(symbol, order[i], op, config["テスト"])
-            sendSlackNotify(config["slackUrl"], message)
+            chatMessage(message)
           }
         }
       }
     }
   }catch(e){
-    sendSlackNotify(config["slackUrl"], e.name + ":" + e.message)
+    chatMessage(e.name + ":" + e.message)
   }
 }
 

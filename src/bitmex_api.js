@@ -18,10 +18,20 @@ function getPosition(api, symbol, test){
   return position
 }
 
-function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQty, test){
+function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQty, test, positionPrice){
   var path = "/api/v1/order"
-  var params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": pegPriceType}
-  var position = sendRequest(api, params, "POST", path, 0, test)
+  var params = {}
+  if(pegPriceType == "None"){return}
+  if(pegPriceType == "Stop"){
+    Logger.log(positionPrice)
+    Logger.log(pegOffsetValue)
+    params = {"symbol": symbol, "side": side, "ordType": "Stop", "stopPx": positionPrice + pegOffsetValue,  "orderQty": orderQty}
+  }else if(pegPriceType == "TrailingStopPeg"){
+    params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": pegPriceType}
+  }
+  Logger.log(params)
+  var position = sendRequest(api, params, "POST", path, 0, test, 100000)
+  Logger.log(position)
   return position
 }
 
@@ -49,7 +59,7 @@ function sendRequest(api, params, method, path, numResend, test){
   }
   if(method=="POST"){
     var payload = params
-    var signature = makeSignature(api.apiSecret, method, nonce, path, payload);
+    var signature = makeMexSignature(api.apiSecret, method, nonce, path, payload);
     option["headers"]["api-signature"] = signature
     option["payload"] = JSON.stringify(payload)
     var query = path
@@ -57,7 +67,7 @@ function sendRequest(api, params, method, path, numResend, test){
       var query = path
       query = path + "?filter=" + encodeURIComponent(JSON.stringify(params))
       var payload = ''
-      var signature = makeSignature(api.apiSecret, method, nonce, query, payload)
+      var signature = makeMexSignature(api.apiSecret, method, nonce, query, payload)
       option["headers"]["api-signature"] = signature
     }
   var response = UrlFetchApp.fetch(api_url+query, option)
@@ -80,3 +90,20 @@ function checkHttpError(response){
   }
 }
 
+function makeMexSignature(apiSecret, verb, expires, path, payload){
+  if(payload == ""){
+    var source = verb + path + expires
+  }else{
+    var s_payload = JSON.stringify(payload)
+    var source = verb + path + expires + s_payload
+  }
+  return hex(Utilities.computeHmacSha256Signature(source, apiSecret))    
+}
+
+function hex(signature){
+  var sign = signature.reduce(function(str,chr){
+    chr = (chr < 0 ? chr + 256 : chr).toString(16);
+    return str + (chr.length==1?'0':'') + chr;
+  },'');
+  return sign
+}
