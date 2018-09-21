@@ -1,46 +1,51 @@
 function bot() {
   var configs = configration();
   var mail = checkGmailUpdate();
+  Logger.log(mail);
   var statuses = getStatus();
   if(!mail){return}
-  Logger.log(Object.keys(configs))
-  Object.keys(configs).forEach(function(key){
-    orderBot(configs[key], mail[key], key, statuses[key])
+  Logger.log(configs)
+  Object.keys(configs).forEach(function(symbol){
+    try{
+      if(!mail[symbol]){return}
+      var op = parseOperation(mail[symbol]["operation"])
+      var order = orderBot(configs[symbol], op, statuses[symbol])
+      Logger.log(order)
+      if(order){
+      Logger.log("order")
+        setPyramidding(symbol, order[1])
+        appendOrder(order[0], op, symbol)
+        for(var i=0;i < order[0].length; i++){
+          var message = formatSlackMessage(symbol, order[0][i], op, configs[symbol]["テスト"])
+          chatMessage(message)
+        }
+      }
+    }catch(e){
+      chatMessage(symbol + ":" + e.name + ":" + e.message)
+    }
   })
 }
 
-function orderBot(config, raw_op, symbol){
+
+
+function orderBot(config, op, status){
   // var messenger = messaging(); 
-  try{
-    if(raw_op && config["稼働"]) {
-      //threads[0].markRead();
-      var api = {"apiKey": config["APIkey"], "apiSecret": config["APIsecret"]}
-      var op = parseOperation(raw_op["operation"])
-      var order = orderFlow(api, op, config, status)
-      if(order.length > 0){
-        appendOrder(order, op, symbol)
-        if (config["slackUrl"] != ""){
-          for(var i=0;i < order.length; i++){
-            var message = formatSlackMessage(symbol, order[i], op, config["テスト"])
-            chatMessage(message)
-          }
-        }
-      }
-    }
-  }catch(e){
-    chatMessage(e.name + ":" + e.message)
+  if(config["稼働"]) {
+    //threads[0].markRead();  
+    var api = {"apiKey": config["APIkey"], "apiSecret": config["APIsecret"]}
+    var order = orderFlow(api, op, config, status)
+    if(order.length == 0){return}
+    return order
   }
 }
 
-
+  
 function orderFlow(api, op, config, statuses){
   var spreadSheet = SpreadsheetApp.getActive()
-  var sheet = spreadSheet.getSheetByName("稼働状況")
+  var sheet = spreadSheet.getSheetByName("戦略ステータス")
   //var numPyramidding = sheet.getRange(2,1).getValue()
-  var numPyramidding = statuses["現状ピラミッディング"]
+  var numPyramidding = statuses["ピラミッディング数"]
   var pyramidding = config["最大ピラミッディング"]
-  Logger.log("現状ピラミッディング数:" + numPyramidding)
-  Logger.log("最大ピラミッディング数:" + pyramidding)
   var response = getPosition(api, config["ticker"], config["テスト"])
   var position = JSON.parse(response)
   var currentQty = 0
@@ -50,75 +55,92 @@ function orderFlow(api, op, config, statuses){
   }
   var ord = []
   if(op=="Close"){
-    ord[0] = marketCloseOrder(api, config["ticker"], config["テスト"]);
-    sheet.getRange(2,1).setValue(0)
+    ord = closeOrder(api, config["ticker"], config["テスト"]);
   }else{
     if(currentQty != 0){
       if(currentQty < 0){
         if(op == "Sell"){
           if(numPyramidding < pyramidding){
-            ord = order(api, config, op, sheet, ord, numPyramidding)
+            ord = order(api, config, op, ord, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == buy
-          ord = dotenOrder(api, config, op, sheet, ord)
+          ord = dotenOrder(api, config, op, ord)
         }
       }else if(currentQty > 0){
         if(op == "Buy"){
           if(numPyramidding < pyramidding){
-            ord = order(api, config, op, sheet, ord, numPyramidding)
+            ord = order(api, config, op, ord, numPyramidding)
           }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
         }else{// op == Sell
-          ord = dotenOrder(api, config, op, sheet, ord)
+          ord = dotenOrder(api, config, op, ord)
         }
       }
     }else{
-      ord = startOrder(api, config, op, sheet, ord)
+      ord = startOrder(api, config, op, ord)
     }
   }
   return ord
 }
 
-function dotenOrder(api, config, op, sheet, order){
-  Logger.log(config)
+function closeOrder(api, config, op, order){
   order[0] = marketCloseOrder(api, config["ticker"], config["テスト"])
-  sheet.getRange(2,1).setValue(0)
-  order[1] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
-  sheet.getRange(2,1).setValue(1)
-  stopOrder(api, config, reverseBuySell(op))
-  return order
+  return [order, 0]
 }
 
-function order(api, config, op, sheet, order, numPyramidding){
+function dotenOrder(api, config, op, order){
+  order.push(marketCloseOrder(api, config["ticker"], config["テスト"]))
+  order.push(marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"]))
+  var position = JSON.parse(order[1])
+  stopOrder(api, config, reverseBuySell(op), position["price"])
+  var pyramidding = 1
+  return [order, pyramidding]
+}
+
+function order(api, config, op, order, numPyramidding){
   order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
-  sheet.getRange(2,1).setValue(numPyramidding + 1)
-  stopOrder(api, config, reverseBuySell(op))
-  return order
+  var position = JSON.parse(order[0])
+  stopOrder(api, config, reverseBuySell(op), position["price"])
+  var pyramidding = numPyramidding + 1
+  return [order, pyramidding]
 }
 
-function startOrder(api, config, op, sheet, order, numPyramidding){
+function startOrder(api, config, op, order, numPyramidding){
   order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
-  sheet.getRange(2,1).setValue(1)
-  stopOrder(api, config, reverseBuySell(op))
-  return order
+  var position = JSON.parse(order[0])
+  stopOrder(api, config, reverseBuySell(op), position["price"])
+  var pyramidding = 1
+  return [order, pyramidding]
 }
 
-function stopOrder(api, config, op){
-  if(["None", ""].indexOf(config["ストップロスタイプ"]) >= 0){
+function stopOrder(api, config, op, positionPrice){
+  if(["None", ""].indexOf(config["ストップロスタイプ"]) < 0){
     var pegOffset = config["ストップのポジションとの差"]
     if(op == "Sell"){
       pegOffset = -pegOffset
     }
-    return marketStopOrder(api, config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], config["テスト"])
+    return marketStopOrder(api, config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], config["テスト"], positionPrice)
   }else{
     return
   }
 }
+
 
 function reverseBuySell(buySell){
   if(buySell == "Buy"){
     return "Sell"
   }else{
     return "Buy"
+  }
+}
+
+function setPyramidding(symbol, num){
+  ss = SpreadsheetApp.getActive()
+  sheet = ss.getSheetByName("戦略ステータス")
+  var symbols = reduceDim(sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues())
+  for(var i=0; i < symbols.length; i++){
+    if(symbols[i] == symbol){
+      sheet.getRange(i+1, 2).setValue(num)
+    }
   }
 }
 
@@ -170,7 +192,7 @@ function configration(){
   return getSymbolAndData("調整項目")
 }
 
-function appendOrder(order, op){
+function appendOrder(order, op, symbol){
   Logger.log(order)
   for(var i=0; i < order.length; i++){
     var orderObj = JSON.parse(order[i])
@@ -178,7 +200,7 @@ function appendOrder(order, op){
     var sheet = spreadSheet.getSheetByName("処理結果")
     var h = sheet.getRange(1, 1, 1, 8).getValues()
     var header = h[0]
-    sheet.appendRow([symbol, orderObj[header[0]], orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], op])
+    sheet.appendRow([symbol, orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], orderObj[header[7]], op])
   }
 }
 

@@ -21,13 +21,13 @@ function getPosition(api, symbol, test){
 function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQty, test, positionPrice){
   var path = "/api/v1/order"
   var params = {}
-  if(pegPriceType == "None"){return}
-  if(pegPriceType == "Stop"){
+  if(pegPriceType == "無し"){return}
+  if(pegPriceType == "ストップロス"){
     Logger.log(positionPrice)
     Logger.log(pegOffsetValue)
     params = {"symbol": symbol, "side": side, "ordType": "Stop", "stopPx": positionPrice + pegOffsetValue,  "orderQty": orderQty}
-  }else if(pegPriceType == "TrailingStopPeg"){
-    params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": pegPriceType}
+  }else if(pegPriceType == "トレーリングストップ"){
+    params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": "TrailingStopPeg"}
   }
   Logger.log(params)
   var position = sendRequest(api, params, "POST", path, 0, test, 100000)
@@ -70,6 +70,7 @@ function sendRequest(api, params, method, path, numResend, test){
       var signature = makeMexSignature(api.apiSecret, method, nonce, query, payload)
       option["headers"]["api-signature"] = signature
     }
+
   var response = UrlFetchApp.fetch(api_url+query, option)
   if(checkHttpError(response) == "Resend"){
     Utilities.sleep(500)

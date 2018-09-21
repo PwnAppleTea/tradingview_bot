@@ -5,7 +5,7 @@ function sendLineNotify(accessToken, message){
         "method": "POST",
         "headers": {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": 	"Bearer " + token
+        "Authorization": 	"Bearer " + accessToken
         },
         "payload": payload
     }
