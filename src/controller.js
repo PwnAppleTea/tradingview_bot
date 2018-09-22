@@ -54,7 +54,8 @@ function setValidateTicker(){
      rules_ticker[platforms[i]] = SpreadsheetApp.newDataValidation().requireValueInList(tickers[platforms[i]])
    }
    var platformConfig = reduceDim(config.getRange(2, 2, config.getLastRow() - 1).getValues())
-   var targetCells = config.getRange(2, 10, config.getLastRow() - 1)
+   
+   var targetCells = config.getRange(2, 9, config.getLastRow() - 1)
    var rulesCell = []
    for(var i=0; i < platformConfig.length; i++){
      rulesCell[i] = [rules_ticker[platformConfig[i]]]

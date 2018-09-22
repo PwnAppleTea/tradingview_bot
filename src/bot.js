@@ -32,7 +32,7 @@ function orderBot(config, op, status){
   // var messenger = messaging(); 
   if(config["稼働"]) {
     //threads[0].markRead();  
-    var api = {"apiKey": config["APIkey"], "apiSecret": config["APIsecret"]}
+    var api = new APIInterface()[config["プラットフォーム"]](config["APIkey"], config["APIsecret"])
     var order = orderFlow(api, op, config, status)
     if(order.length == 0){return}
     return order
@@ -46,7 +46,7 @@ function orderFlow(api, op, config, statuses){
   //var numPyramidding = sheet.getRange(2,1).getValue()
   var numPyramidding = statuses["ピラミッディング数"]
   var pyramidding = config["最大ピラミッディング"]
-  var response = getPosition(api, config["ticker"], config["テスト"])
+  var response = api.getPosition(config["ticker"])
   var position = JSON.parse(response)
   var currentQty = 0
   
@@ -55,7 +55,7 @@ function orderFlow(api, op, config, statuses){
   }
   var ord = []
   if(op=="Close"){
-    ord = closeOrder(api, config["ticker"], config["テスト"]);
+    ord = closeOrder(api, config["ticker"], ord);
   }else{
     if(currentQty != 0){
       if(currentQty < 0){
@@ -82,14 +82,14 @@ function orderFlow(api, op, config, statuses){
   return ord
 }
 
-function closeOrder(api, config, op, order){
-  order[0] = marketCloseOrder(api, config["ticker"], config["テスト"])
+function closeOrder(api, config, order){
+  order[0] = api.marketCloseOrder(config["ticker"])
   return [order, 0]
 }
 
 function dotenOrder(api, config, op, order){
-  order.push(marketCloseOrder(api, config["ticker"], config["テスト"]))
-  order.push(marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"]))
+  order.push(api.marketCloseOrder(config["ticker"]))
+  order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
   var position = JSON.parse(order[1])
   stopOrder(api, config, reverseBuySell(op), position["price"])
   var pyramidding = 1
@@ -97,7 +97,7 @@ function dotenOrder(api, config, op, order){
 }
 
 function order(api, config, op, order, numPyramidding){
-  order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
+  order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
   var position = JSON.parse(order[0])
   stopOrder(api, config, reverseBuySell(op), position["price"])
   var pyramidding = numPyramidding + 1
@@ -105,7 +105,7 @@ function order(api, config, op, order, numPyramidding){
 }
 
 function startOrder(api, config, op, order, numPyramidding){
-  order[0] = marketOrder(api, config["ticker"], op, config["ポジションサイズ"], config["テスト"])
+  order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
   var position = JSON.parse(order[0])
   stopOrder(api, config, reverseBuySell(op), position["price"])
   var pyramidding = 1
@@ -118,7 +118,7 @@ function stopOrder(api, config, op, positionPrice){
     if(op == "Sell"){
       pegOffset = -pegOffset
     }
-    return marketStopOrder(api, config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], config["テスト"], positionPrice)
+    return api.marketStopOrder(config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], positionPrice)
   }else{
     return
   }

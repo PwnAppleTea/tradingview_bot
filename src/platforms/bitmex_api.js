@@ -1,24 +1,29 @@
-function marketOrder(api, symbol, side, orderQty, test){
+var bitmex = function(api_key, api_secret){
+  this.api_key = api_key
+  this.api_secret = api_secret
+}
+
+bitmex.prototype.marketOrder = function(symbol, side, orderQty){
   var path = "/api/v1/order";
   var params = {"symbol": symbol, "side": side, "orderQty": orderQty, "ordType": "Market"};
-  var order = sendRequest(api, params, "POST", path, 0, test)
+  var order = this.sendRequest_(params, "POST", path, 0)
   return order
 }
 
-function marketCloseOrder(api, symbol, test){
+bitmex.prototype.marketCloseOrder = function(symbol){
   var path = "/api/v1/order/closePosition"
   var params = {"symbol": symbol}
-  return sendRequest(api, params, "POST", path, 0, test)
+  return this.sendRequest_(params, "POST", path, 0)
 }
 
-function getPosition(api, symbol, test){
+bitmex.prototype.getPosition = function(symbol){
   var path = "/api/v1/position"
   var params = {"symbol": symbol}
-  var position = sendRequest(api, params, "GET", path, 0, test)
+  var position = this.sendRequest_(params, "GET", path, 0)
   return position
 }
 
-function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQty, test, positionPrice){
+bitmex.prototype.marketStopOrder = function(symbol, side, pegOffsetValue, pegPriceType, orderQty, positionPrice){
   var path = "/api/v1/order"
   var params = {}
   if(pegPriceType == "無し"){return}
@@ -30,20 +35,16 @@ function marketStopOrder(api, symbol, side, pegOffsetValue, pegPriceType, orderQ
     params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": "TrailingStopPeg"}
   }
   Logger.log(params)
-  var position = sendRequest(api, params, "POST", path, 0, test, 100000)
+  var position = this.sendRequest_(params, "POST", path, 0, 100000)
   Logger.log(position)
   return position
 }
 
 
-function sendRequest(api, params, method, path, numResend, test){
+bitmex.prototype.sendRequest_ = function(params, method, path, numResend){
   if (numResend > 10){throw new HTTPException("Too much resend request")}
   var api_url = "";
-  if(test=="test"){  
-    api_url = "https://testnet.bitmex.com";
-  }else if(test=="main"){
-    api_url = "https://www.bitmex.com";
-  }
+  api_url = "https://www.bitmex.com";
   Logger.log(params)
   var path = path;
   d = new Date()
@@ -52,14 +53,14 @@ function sendRequest(api, params, method, path, numResend, test){
     "headers": {
       "Content-Type": "application/json", 
       'api-nonce': nonce,
-      "api-key": api.apiKey, 
+      "api-key": this.api_key, 
     },
     "method": method, 
     "muteHttpExceptions": true
   }
   if(method=="POST"){
     var payload = params
-    var signature = makeMexSignature(api.apiSecret, method, nonce, path, payload);
+    var signature = makeMexSignature(this.api_secret, method, nonce, path, payload);
     option["headers"]["api-signature"] = signature
     option["payload"] = JSON.stringify(payload)
     var query = path
@@ -67,14 +68,14 @@ function sendRequest(api, params, method, path, numResend, test){
       var query = path
       query = path + "?filter=" + encodeURIComponent(JSON.stringify(params))
       var payload = ''
-      var signature = makeMexSignature(api.apiSecret, method, nonce, query, payload)
+      var signature = makeMexSignature(this.api_secret, method, nonce, query, payload)
       option["headers"]["api-signature"] = signature
     }
 
   var response = UrlFetchApp.fetch(api_url+query, option)
   if(checkHttpError(response) == "Resend"){
     Utilities.sleep(500)
-    return sendRequest(api, params, method, path, numResend + 1, test)
+    return this.sendRequest_(params, method, path, numResend + 1)
   }
   return response
 }
