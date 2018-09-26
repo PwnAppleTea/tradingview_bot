@@ -45,6 +45,7 @@ function orderFlow(api, op, config, statuses){
   var sheet = spreadSheet.getSheetByName("戦略ステータス")
   //var numPyramidding = sheet.getRange(2,1).getValue()
   var numPyramidding = statuses["ピラミッディング数"]
+  if(numPyramidding.isEmpty()){numPyramidding = 0}
   var pyramidding = config["最大ピラミッディング"]
   var response = api.getPosition(config["ticker"])
   var position = JSON.parse(response)

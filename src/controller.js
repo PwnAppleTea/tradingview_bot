@@ -8,6 +8,7 @@ function onOpen(){
 }
 
 function trigger(){
+  var triggers = ScriptApp.getProjectTriggers();
   var ss = SpreadsheetApp.getActive()
   var sheet = ss.getSheetByName("bot稼働状況")
   var status = sheet.getRange(1,1)
