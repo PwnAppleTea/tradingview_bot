@@ -8,23 +8,26 @@ function closeOrder(api, config, order){
     order.push(api.marketCloseOrder(config["ticker"]))
     order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
     var position = JSON.parse(order[1])
-    stopOrder(api, config, reverseBuySell(op), position["price"])
+    var stop = stopOrder(api, config, reverseBuySell(op), position["price"])
+    if(stop){order.push(stop)}
     var pyramidding = 1
     return [order, pyramidding]
   }
   
   function order(api, config, op, order, numPyramidding){
-    order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
+    order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
     var position = JSON.parse(order[0])
-    stopOrder(api, config, reverseBuySell(op), position["price"])
+    var stop = stopOrder(api, config, reverseBuySell(op), position["price"])
+    if(stop){order.push(stop)}
     var pyramidding = numPyramidding + 1
     return [order, pyramidding]
   }
   
   function startOrder(api, config, op, order, numPyramidding){
-    order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
+    order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
     var position = JSON.parse(order[0])
-    stopOrder(api, config, reverseBuySell(op), position["price"])
+    var stop = stopOrder(api, config, reverseBuySell(op), position["price"])
+    if(stop){order.push(stop)}
     var pyramidding = 1
     return [order, pyramidding]
   }

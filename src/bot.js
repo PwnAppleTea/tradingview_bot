@@ -14,7 +14,7 @@ function bot() {
         setPyramidding(symbol, order[1])
         appendOrder(order[0], op, symbol)
         for(var i=0;i < order[0].length; i++){
-          var message = formatSlackMessage(symbol, order[0][i], op, configs[symbol]["テスト"])
+          var message = formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])
           chatMessage(message)
         }
       }
@@ -148,14 +148,14 @@ function getStatus(){
   return getSymbolAndData("戦略ステータス")
 }
 
-function formatSlackMessage(strategy, order, op, platform){
+function formatMessage(strategy, order, op, platform){
   var obj = JSON.parse(order)
   var symbol = obj["symbol"]
   var orderQty = obj["orderQty"]
   var price = obj["price"]
+  var orderType = obj["ordType"]
   var d = new Date()
-  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "platform" + platform + " " + "Strategy " + strategy + " : " + op + " in " + symbol + " amount " + orderQty + " price at " + price
-  return message
+  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy + " : " + op + " in " + platform + " ticker " + symbol + " amount " + orderQty + " price at " + price + "order type is " + orderType   return message
 }
 
 
