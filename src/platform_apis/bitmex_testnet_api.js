@@ -83,7 +83,7 @@ bitmex_testnet.prototype.sendRequest_ = function(params, method, path, numResend
 function checkHttpError(response){
   res = JSON.parse(response)
   code = response.getResponseCode()
-  if(code > 400){
+  if(code >= 400){
     if(code == 503){
       return "Resend"
     }else{
