@@ -4,7 +4,6 @@ function bot() {
   Logger.log(mail);
   var statuses = getStatus();
   if(!mail){return}
-  Logger.log(configs)
   Object.keys(configs).forEach(function(symbol){
     try{
       if(!mail[symbol]){return}
@@ -12,7 +11,6 @@ function bot() {
       var order = orderBot(configs[symbol], op, statuses[symbol])
       Logger.log(order)
       if(order){
-      Logger.log("order")
         setPyramidding(symbol, order[1])
         appendOrder(order[0], op, symbol)
         for(var i=0;i < order[0].length; i++){
@@ -25,8 +23,6 @@ function bot() {
     }
   })
 }
-
-
 
 function orderBot(config, op, status){
   // var messenger = messaging(); 
@@ -45,7 +41,7 @@ function orderFlow(api, op, config, statuses){
   var sheet = spreadSheet.getSheetByName("戦略ステータス")
   //var numPyramidding = sheet.getRange(2,1).getValue()
   var numPyramidding = statuses["ピラミッディング数"]
-  if(numPyramidding.isEmpty()){numPyramidding = 0}
+  if(!numPyramidding){numPyramidding = 0}
   var pyramidding = config["最大ピラミッディング"]
   var response = api.getPosition(config["ticker"])
   var position = JSON.parse(response)
@@ -83,57 +79,6 @@ function orderFlow(api, op, config, statuses){
   return ord
 }
 
-function closeOrder(api, config, order){
-  order[0] = api.marketCloseOrder(config["ticker"])
-  return [order, 0]
-}
-
-function dotenOrder(api, config, op, order){
-  order.push(api.marketCloseOrder(config["ticker"]))
-  order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
-  var position = JSON.parse(order[1])
-  stopOrder(api, config, reverseBuySell(op), position["price"])
-  var pyramidding = 1
-  return [order, pyramidding]
-}
-
-function order(api, config, op, order, numPyramidding){
-  order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
-  var position = JSON.parse(order[0])
-  stopOrder(api, config, reverseBuySell(op), position["price"])
-  var pyramidding = numPyramidding + 1
-  return [order, pyramidding]
-}
-
-function startOrder(api, config, op, order, numPyramidding){
-  order[0] = api.marketOrder(config["ticker"], op, config["ポジションサイズ"])
-  var position = JSON.parse(order[0])
-  stopOrder(api, config, reverseBuySell(op), position["price"])
-  var pyramidding = 1
-  return [order, pyramidding]
-}
-
-function stopOrder(api, config, op, positionPrice){
-  if(["None", ""].indexOf(config["ストップロスタイプ"]) < 0){
-    var pegOffset = config["ストップのポジションとの差"]
-    if(op == "Sell"){
-      pegOffset = -pegOffset
-    }
-    return api.marketStopOrder(config["ticker"], op, pegOffset, config["ストップロスタイプ"], config["ポジションサイズ"], positionPrice)
-  }else{
-    return
-  }
-}
-
-
-function reverseBuySell(buySell){
-  if(buySell == "Buy"){
-    return "Sell"
-  }else{
-    return "Buy"
-  }
-}
-
 function setPyramidding(symbol, num){
   ss = SpreadsheetApp.getActive()
   sheet = ss.getSheetByName("戦略ステータス")
@@ -144,12 +89,6 @@ function setPyramidding(symbol, num){
     }
   }
 }
-
-function checkStopOrder(config, key){
-  
-}
-
-
 
 function checkGmailUpdate(){
   // return {symbol:{op: }}
@@ -209,13 +148,13 @@ function getStatus(){
   return getSymbolAndData("戦略ステータス")
 }
 
-function formatSlackMessage(strategy, order, op, test){
+function formatSlackMessage(strategy, order, op, platform){
   var obj = JSON.parse(order)
   var symbol = obj["symbol"]
   var orderQty = obj["orderQty"]
   var price = obj["price"]
   var d = new Date()
-  var message = Utilities.formatDate(d,"JST","yyyy/MM/dd") + "[" + test + "]" + "Strategy " + strategy + ":" + op + " in " + symbol + " amount " + orderQty + " price at " + price
+  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "platform" + platform + " " + "Strategy " + strategy + " : " + op + " in " + symbol + " amount " + orderQty + " price at " + price
   return message
 }
 
