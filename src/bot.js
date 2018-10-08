@@ -1,3 +1,7 @@
+import "google-apps-script"
+
+//
+
 function bot() {
   var configs = configration();
   var mail = checkGmailUpdate();
@@ -6,18 +10,27 @@ function bot() {
   if(!mail){return}
   Object.keys(configs).forEach(function(symbol){
     try{
-      if(!mail[symbol]){return}
-      var op = parseOperation(mail[symbol]["operation"])
-      var order = orderBot(configs[symbol], op, statuses[symbol])
-      Logger.log(order)
-      if(order){
-        setPyramidding(symbol, order[1])
-        appendOrder(order[0], op, symbol)
-        for(var i=0;i < order[0].length; i++){
-          var message = formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])
-          chatMessage(message)
+      var api = new APIInterface()[config[symbol]["プラットフォーム"]](config[symbol]["APIkey"], config[symbol]["APIsecret"])
+      if(mail[symbol]){
+        var op = parseOperation(mail[symbol]["operation"])
+        var order = orderBot(configs[symbol], op, statuses[symbol])
+        Logger.log(order)
+        if(order){
+          setStatus(symbol, order[1])
+          appendOrder(order[0], op, symbol)
+          for(var i=0;i < order[0].length; i++){
+            var message = formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])
+            chatMessage(message)
+          }
         }
       }
+      //FIXME: 
+       
+      var filledStopOrders = checkActiveStopLossIsFilled(configs[symbol], api, statuses[symbol]["オーダーシリーズID"])
+      filledStopOrders.map(formatStopLossExecutedMessage(filledStopOrder))
+      .forEach(chatMessage(message))
+      
+
     }catch(e){
       chatMessage(symbol + ":" + e.name + ":" + e.message)
     }
@@ -28,64 +41,60 @@ function orderBot(config, op, status){
   // var messenger = messaging(); 
   if(config["稼働"]) {
     //threads[0].markRead();  
-    var api = new APIInterface()[config["プラットフォーム"]](config["APIkey"], config["APIsecret"])
     var order = orderFlow(api, op, config, status)
     if(order.length == 0){return}
     return order
   }
 }
 
-  
 function orderFlow(api, op, config, statuses){
-  var spreadSheet = SpreadsheetApp.getActive()
-  var sheet = spreadSheet.getSheetByName("戦略ステータス")
-  //var numPyramidding = sheet.getRange(2,1).getValue()
   var numPyramidding = statuses["ピラミッディング数"]
   if(!numPyramidding){numPyramidding = 0}
   var pyramidding = config["最大ピラミッディング"]
   var response = api.getPosition(config["ticker"])
   var position = JSON.parse(response)
   var currentQty = 0
-  
   if(position.length > 0){
     currentQty = position[0]["currentQty"]
   }
   var ord = []
-  if(op=="Close"){
-    ord = closeOrder(api, config["ticker"], ord);
+  
+  if(currentQty < 0){
+    if(op == "Sell"){
+      if(numPyramidding < pyramidding){
+        ord = order(api, config, op, ord, statuses)
+      }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
+    }else if(op=="CloseShort"){
+      ord = closeOrder(api, config, op, ord, statuses)
+    }else if(op=="Buy"){
+      ord = dotenOrder(api, config, op, ord, statuses)
+    }
+  }else if(currentQty > 0){
+    if(op == "Buy"){
+      if(numPyramidding < pyramidding){
+        ord = order(api, config, op, ord, statuses)
+      }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
+    }else if(op=="CloseLong"){
+      ord = closeOrder(api, config, op, ord, statuses)
+    }else if(op=="Sell"){
+      ord = dotenOrder(api, config, op, ord, statuses)
+    }
   }else{
-    if(currentQty != 0){
-      if(currentQty < 0){
-        if(op == "Sell"){
-          if(numPyramidding < pyramidding){
-            ord = order(api, config, op, ord, numPyramidding)
-          }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
-        }else{// op == buy
-          ord = dotenOrder(api, config, op, ord)
-        }
-      }else if(currentQty > 0){
-        if(op == "Buy"){
-          if(numPyramidding < pyramidding){
-            ord = order(api, config, op, ord, numPyramidding)
-          }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
-        }else{// op == Sell
-          ord = dotenOrder(api, config, op, ord)
-        }
-      }
-    }else{
-      ord = startOrder(api, config, op, ord)
+    if(op=="Buy" || op=="Sell"){
+      ord = startOrder(api, config, op, ord, statuses)
     }
   }
   return ord
 }
 
-function setPyramidding(symbol, num){
+function setStatus(symbol, status){
   ss = SpreadsheetApp.getActive()
   sheet = ss.getSheetByName("戦略ステータス")
   var symbols = reduceDim(sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues())
   for(var i=0; i < symbols.length; i++){
     if(symbols[i] == symbol){
-      sheet.getRange(i+1, 2).setValue(num)
+      sheet.getRange(i+1, 2).setValue(status["ピラミッディング数"])
+      sheet.getRange(i+1, 2).setValue(status["オーダーシリーズ"])
     }
   }
 }
@@ -106,12 +115,12 @@ function checkGmailUpdate(){
 }
 
 function parseOperation(op){
-  var ops = {"Long": "Buy", "Short": "Sell", "Close": "Close"}
+  var ops = {"Long": "Buy", "Short": "Sell", "CloseLong": "CloseLong", "CloseShort": "CloseShort"}
   return ops[op]
 }
 
 function parseMessage(message, strategySymbol){
-  var permit = ["Long", "Short", "Close"]
+  var permit = ["Long", "Short", "CloseLong", "CloseShort"]
   var regexpOp = /strategy-operation:.*?:strategy-operation/
   var regexpSymbol = /strategy-symbol:.*?:strategy-symbol/
   var op = regexpOp.exec(message)
@@ -144,25 +153,38 @@ function appendOrder(order, op, symbol){
   }
 }
 
+// did ストップロスの有無
+function checkActiveStopLossIsFilled(config, api, orderSeriesID){
+  var stopLoss = getActiveStopLossByOrderSeries(orderSeriesID)
+  var orderIDs = stopLoss.rows.map(function(row){return row[stopLoss.columns.indexOf("オーダーID")]})
+  var currentOrders = getOrder(api, config, orderIDs)
+  return currentOrders.map(function(order){if(order["オーダーステータス"] == "Filled") return order}) 
+}
+
+function formatStopLossExecutedMessage(order, platform, strategy){
+  return "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "] Strategy " + strategy + "stopLoss is Filled " + order["side"] + "in" +  platform + "ticker" + order["ticker"] + "amount" + order["ポジションサイズ"] + "price at" + order["価格"] 
+}
+
 function getStatus(){
   return getSymbolAndData("戦略ステータス")
 }
 
 function formatMessage(strategy, order, op, platform){
   var obj = JSON.parse(order)
-  var symbol = obj["symbol"]
-  var orderQty = obj["orderQty"]
-  var price = obj["price"]
-  var orderType = obj["ordType"]
+  var symbol = obj["ticker"]
+  var orderQty = obj["ポジションサイズ"]
+  var price = obj["価格"]
+  var orderType = obj["オーダータイプ"]
   var d = new Date()
-  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy + " : " + op + " in " + platform + " ticker " + symbol + " amount " + orderQty + " price at " + price + "order type is " + orderType   return message
+  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy + " : " + op + " in " + platform + " ticker " + symbol + " amount " + orderQty + " price at " + price + "order type is " + orderType
+  return message
 }
 
 
 function getSymbolAndData(sheetName){
   var spreadSheet = SpreadsheetApp.getActive()
   var sheet = spreadSheet.getSheetByName(sheetName)
-  var dataValues = sheet.getRange(1, 1, sheet.getLastRow(),sheet.getLastColumn()).getValues()
+  var dataValues = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues()
   var headers = dataValues[0]
   var dataArray = dataValues.slice(1)
   var dataObj = {}
@@ -176,4 +198,3 @@ function getSymbolAndData(sheetName){
   })
   return dataObj
 }
-
