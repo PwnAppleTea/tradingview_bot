@@ -22,7 +22,6 @@ function trigger(){
   if(statusVal == "稼働中" || botTrigger){
     throw "botはすでに稼働中です。もし停止したい場合はStop Botを選択してください"
   }else{
-    createTableIfNotExist()
     ScriptApp.newTrigger("bot").timeBased().everyMinutes(1).create();
     status.setValue("稼働中")
   }

@@ -2,7 +2,7 @@
 
 function getTableIdFromName(tableName){
   var tables = FusionTables.Table.list()
-  var targetTable = deleteUndefinedFromArray(tables["items"].map(function(table){if(table["name"] == "tradingview_bot_sheet v2 development-処理結果") return table}))
+  var targetTable = deleteUndefinedFromArray(tables["items"].map(function(table){if(table["name"] == tableName) return table}))
   if(!targetTable){return}
   return targetTable["tableId"]
 }
@@ -23,16 +23,16 @@ function appendOrderLog(order, op, orderSeriesID, platform, strategySymbol){
   var tableId = getTableIdFromName("TBOT_処理結果")
   
   var getSQL = "SELECT * FROM " + tableId + " LIMIT = 1"
+  var res = FusionTables.Query.sqlGet(getSQL)
   var reducer = function(accumulator, currentValue){return accumulator + ", " + currentValue}
   orderKeys = order.keys()
   var row = orderSeriesID + ", " + platform + ", " + strategySymbol + ", "
   var orderRow = ""
   for(var i = 0; i < orderKeys.length ; i ++){orderRow + ", " +  order[orderKeys[i]]}
   row = row + orderRow + ", " + op
-  var insertSQL = "INSERT INTO " + tableId + getSQL.columns().reduce(reducer) + "VALUES " + row
+  var insertSQL = "INSERT INTO " + tableId + res.columns().reduce(reducer) + "VALUES " + row
   return FusionTables.Query.sql(insertSQL)
 }
-
 
 function updateOrderLog(order){
   var tableId = getTableIdFromName("TBOT_処理結果")
@@ -46,7 +46,7 @@ function updateOrderLog(order){
 function createTableIfNotExist(){
   if(!getTableIdFromName("TBOT_処理結果")){
     var resource = {
-      "name": "TBOT_orderLog",
+      "name": "TBOT_処理結果",
       "isExportable": true,
       "kind": "fusiontable#table",
       "columns":[
@@ -130,3 +130,4 @@ function createTableIfNotExist(){
     FusionTables.Table.insert(resource)
   }
 }
+

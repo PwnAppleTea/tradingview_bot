@@ -30,6 +30,20 @@ bitmexInterface.prototype.getPosition = function(symbol){
 /**
  * TODO: add cancel order 
 **/
+bitmexInterface.prototype.cancelOrder = function(symbol, orderIDs){
+  var path = "/api/v1/order"
+  var params = {"symbol": symbol, "orderID": orderIDs}
+  var method = "DELETE"
+  return this.parse_orders(this.sendRequest_(params, method, path, 0))
+}
+
+bitmexInterface.prototype.cancelAllOrder = function(symbol){
+  var path = "/api/v1/order/all"
+  var params = {"symbol": symbol}
+  var method = "DELETE"
+  return this.parse_orders(this.sendRequest_(params, method, path, 0))
+}
+
 bitmexInterface.prototype.marketStopOrder = function(symbol, side, pegOffsetValue, pegPriceType, orderQty, positionPrice){
   var path = "/api/v1/order"
   var params = {}
@@ -50,6 +64,7 @@ bitmexInterface.prototype.marketStopOrder = function(symbol, side, pegOffsetValu
 
 bitmexInterface.prototype.sendRequest_ = function(params, method, path, numResend){
   if (numResend > 10){throw new HTTPException("Too much resend request")}
+  var api_url = "";
   api_url = this.api_url;
   Logger.log(params)
   var path = path;

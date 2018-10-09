@@ -1,8 +1,6 @@
 import "google-apps-script"
-
-//
-
 function bot() {
+  createTableIfNotExist()
   var configs = configration();
   var mail = checkGmailUpdate();
   Logger.log(mail);
@@ -13,24 +11,24 @@ function bot() {
       var api = new APIInterface()[config[symbol]["プラットフォーム"]](config[symbol]["APIkey"], config[symbol]["APIsecret"])
       if(mail[symbol]){
         var op = parseOperation(mail[symbol]["operation"])
-        var order = orderBot(configs[symbol], op, statuses[symbol])
+        var orders = orderBot(configs[symbol], op, statuses[symbol])
+        var order = orders[0]
+        var cancelOrder = orders[1]
         Logger.log(order)
         if(order){
           setStatus(symbol, order[1])
-          appendOrder(order[0], op, symbol)
-          for(var i=0;i < order[0].length; i++){
-            var message = formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])
-            chatMessage(message)
-          }
+          insertOrder(order[0], op, order[1]["orderSeriesID"], symbol)
+          order[0].map(formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])).forEach(chatMessage(message))
+        }
+        if(cancelOrder){
+          cancelOrder.forEach(updateOrderLog(cancelOrder))
         }
       }
-      //FIXME: 
-       
-      var filledStopOrders = checkActiveStopLossIsFilled(configs[symbol], api, statuses[symbol]["オーダーシリーズID"])
+      //TODO: stopオーダーがfilledした結果をfusionTableに書き込む
+      var filledStopOrders = checkActiveStopLossIsFilled(configs[symbol], api, statuses[symbol]["orderSeriesID"])
       filledStopOrders.map(formatStopLossExecutedMessage(filledStopOrder))
       .forEach(chatMessage(message))
-      
-
+      filledStopOrders.forEach(updateOrderLog(filledStopOrder))
     }catch(e){
       chatMessage(symbol + ":" + e.name + ":" + e.message)
     }
@@ -38,9 +36,7 @@ function bot() {
 }
 
 function orderBot(config, op, status){
-  // var messenger = messaging(); 
   if(config["稼働"]) {
-    //threads[0].markRead();  
     var order = orderFlow(api, op, config, status)
     if(order.length == 0){return}
     return order
@@ -57,34 +53,36 @@ function orderFlow(api, op, config, statuses){
   if(position.length > 0){
     currentQty = position[0]["currentQty"]
   }
-  var ord = []
-  
+  var order = undefined
+  var cancelOrder = undefined
   if(currentQty < 0){
     if(op == "Sell"){
       if(numPyramidding < pyramidding){
-        ord = order(api, config, op, ord, statuses)
+        ord = order(api, config, op, statuses)
       }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
     }else if(op=="CloseShort"){
-      ord = closeOrder(api, config, op, ord, statuses)
+      ord = closeOrder(api, config, op, statuses)
     }else if(op=="Buy"){
+      cancelOrder = api.cancelAllOrder(config["ticker"])
       ord = dotenOrder(api, config, op, ord, statuses)
     }
   }else if(currentQty > 0){
     if(op == "Buy"){
       if(numPyramidding < pyramidding){
-        ord = order(api, config, op, ord, statuses)
+        ord = order(api, config, op, statuses)
       }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
     }else if(op=="CloseLong"){
-      ord = closeOrder(api, config, op, ord, statuses)
+      ord = closeOrder(api, config, op, statuses)
     }else if(op=="Sell"){
-      ord = dotenOrder(api, config, op, ord, statuses)
+      cancelOrder = api.cancelAllOrder(config["ticker"])
+      ord = dotenOrder(api, config, op, statuses)
     }
   }else{
     if(op=="Buy" || op=="Sell"){
-      ord = startOrder(api, config, op, ord, statuses)
+      ord = startOrder(api, config, op, statuses)
     }
   }
-  return ord
+  return [ord, cancelOrder]
 }
 
 function setStatus(symbol, status){
@@ -93,8 +91,8 @@ function setStatus(symbol, status){
   var symbols = reduceDim(sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues())
   for(var i=0; i < symbols.length; i++){
     if(symbols[i] == symbol){
-      sheet.getRange(i+1, 2).setValue(status["ピラミッディング数"])
-      sheet.getRange(i+1, 2).setValue(status["オーダーシリーズ"])
+      sheet.getRange(i + 1, 2).setValue(status["ピラミッディング数"])
+      sheet.getRange(i + 1, 2).setValue(status["orderSeriesID"])
     }
   }
 }
@@ -141,19 +139,14 @@ function configration(){
   return getSymbolAndData("調整項目")
 }
 
-function appendOrder(order, op, symbol){
+function upsertOrder(order, op, orderSeriesID, symbol){
   Logger.log(order)
   for(var i=0; i < order.length; i++){
-    var orderObj = JSON.parse(order[i])
-    var spreadSheet = SpreadsheetApp.getActive()
-    var sheet = spreadSheet.getSheetByName("処理結果")
-    var h = sheet.getRange(1, 1, 1, 8).getValues()
-    var header = h[0]
-    sheet.appendRow([symbol, orderObj[header[1]], orderObj[header[2]], orderObj[header[3]], orderObj[header[4]], orderObj[header[5]], orderObj[header[6]], orderObj[header[7]], op])
+    appendOrderLog(order, op, orderSeriesID, symbol)
   }
 }
 
-// did ストップロスの有無
+// ストップロスがfilledされた場合(毎分チェック用)
 function checkActiveStopLossIsFilled(config, api, orderSeriesID){
   var stopLoss = getActiveStopLossByOrderSeries(orderSeriesID)
   var orderIDs = stopLoss.rows.map(function(row){return row[stopLoss.columns.indexOf("オーダーID")]})
