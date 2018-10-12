@@ -1,23 +1,28 @@
 
-function closeOrder(api, config){
+function closeOrder(api, config, statuses){
   var order = []
+  var status = {}
   order[0] = api.marketCloseOrder(config["ticker"])
-  return [order, 0]
+  status["ピラミッディング数"] = 0
+  status["orderSeriesID"] = statuses["orderSeriesID"]
+  return [order, status]
 }
 
 function dotenOrder(api, config, op, statuses){
   var order = []
+  var status = {}
   order.push(api.marketCloseOrder(config["ticker"]))
   order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
   var stop = stopOrder(api, config, reverseBuySell(op), order[0]["価格"])
   if(stop){order.push(stop)}
-  status["ピラミッディング数"] = statuses["ピラミッディング数"] + 1
+  status["ピラミッディング数"] = 1
   status["orderSeriesID"] = statuses["orderSeriesID"] + 1
   return [order, status]
 }
 
-function order(api, config, op, statuses){
+function normalOrder(api, config, op, statuses){
   var order = []
+  var status = {}
   order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
   var stop = stopOrder(api, config, reverseBuySell(op), order[0]["価格"])
   if(stop){order.push(stop)}
@@ -29,6 +34,7 @@ function order(api, config, op, statuses){
 
 function startOrder(api, config, op, statuses){
   var order = []
+  var status = {}
   order.push(api.marketOrder(config["ticker"], op, config["ポジションサイズ"]))
   var stop = stopOrder(api, config, reverseBuySell(op), order[0]["価格"])
   if(stop){order.push(stop)}

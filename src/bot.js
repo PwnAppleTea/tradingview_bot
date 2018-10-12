@@ -1,51 +1,49 @@
-import "google-apps-script"
 function bot() {
   createTableIfNotExist()
   var configs = configration();
   var mail = checkGmailUpdate();
-  Logger.log(mail);
   var statuses = getStatus();
-  if(!mail){return}
   Object.keys(configs).forEach(function(symbol){
     try{
-      var api = new APIInterface()[config[symbol]["プラットフォーム"]](config[symbol]["APIkey"], config[symbol]["APIsecret"])
-      if(mail[symbol]){
-        var op = parseOperation(mail[symbol]["operation"])
-        var orders = orderBot(configs[symbol], op, statuses[symbol])
-        var order = orders[0]
-        var cancelOrder = orders[1]
-        Logger.log(order)
-        if(order){
-          setStatus(symbol, order[1])
-          insertOrder(order[0], op, order[1]["orderSeriesID"], symbol)
-          order[0].map(formatMessage(symbol, order[0][i], op, configs[symbol]["プラットフォーム"])).forEach(chatMessage(message))
+      if(configs[symbol]["稼働"]) {
+        var api = new APIInterface()[configs[symbol]["プラットフォーム"]](configs[symbol]["APIkey"], configs[symbol]["APIsecret"])
+        if(mail){
+          if(mail[symbol]){
+            var op = parseOperation(mail[symbol]["operation"])
+            var orders = orderBot(api, configs[symbol], op, statuses[symbol])
+            var order = orders[0]
+            var cancelOrder = orders[1]
+            if(order){
+              Logger.log(order)
+              setStatus(symbol, order[1])
+              appendOrder(order[0], op, configs[symbol]["プラットフォーム"], order[1]["orderSeriesID"], symbol)
+              order[0].map(function(ord){return formatMessage(symbol, ord, op, configs[symbol]["プラットフォーム"])}).forEach(chatMessage)
+            }
+            if(cancelOrder){
+              cancelOrder.forEach(updateOrderLog)
+            }
+          }
         }
-        if(cancelOrder){
-          cancelOrder.forEach(updateOrderLog(cancelOrder))
-        }
+        //TODO: stopオーダーがfilledした結果をfusionTableに書き込む
+        var filledStopOrders = checkActiveStopLossIsFilled(symbol, configs[symbol], api, statuses[symbol]["orderSeriesID"])
+        filledStopOrders.map(function(ord){return formatStopLossExecutedMessage(ord, configs[symbol]["プラットフォーム"], symbol)}).forEach(chatMessage)
+        filledStopOrders.forEach(updateOrderLog)
       }
-      //TODO: stopオーダーがfilledした結果をfusionTableに書き込む
-      var filledStopOrders = checkActiveStopLossIsFilled(configs[symbol], api, statuses[symbol]["orderSeriesID"])
-      filledStopOrders.map(formatStopLossExecutedMessage(filledStopOrder))
-      .forEach(chatMessage(message))
-      filledStopOrders.forEach(updateOrderLog(filledStopOrder))
     }catch(e){
       chatMessage(symbol + ":" + e.name + ":" + e.message)
     }
   })
 }
 
-function orderBot(config, op, status){
-  if(config["稼働"]) {
-    var order = orderFlow(api, op, config, status)
-    if(order.length == 0){return}
-    return order
-  }
+function orderBot(api, config, op, status){
+  var order = orderFlow(api, op, config, status)
+  return order
 }
 
 function orderFlow(api, op, config, statuses){
+  if(statuses["ピラミッディング数"] == ""){statuses["ピラミッディング数"] = 0}
+  if(statuses["orderSeriesID"] == ""){statuses["orderSeriesID"] = 0}
   var numPyramidding = statuses["ピラミッディング数"]
-  if(!numPyramidding){numPyramidding = 0}
   var pyramidding = config["最大ピラミッディング"]
   var response = api.getPosition(config["ticker"])
   var position = JSON.parse(response)
@@ -58,31 +56,34 @@ function orderFlow(api, op, config, statuses){
   if(currentQty < 0){
     if(op == "Sell"){
       if(numPyramidding < pyramidding){
-        ord = order(api, config, op, statuses)
+        order = normalOrder(api, config, op, statuses)
       }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
     }else if(op=="CloseShort"){
-      ord = closeOrder(api, config, op, statuses)
+      cancelOrder = api.cancelAllOrder(config["ticker"])
+      order = closeOrder(api, config, statuses)
     }else if(op=="Buy"){
       cancelOrder = api.cancelAllOrder(config["ticker"])
-      ord = dotenOrder(api, config, op, ord, statuses)
+      order = dotenOrder(api, config, op, statuses)
     }
   }else if(currentQty > 0){
     if(op == "Buy"){
       if(numPyramidding < pyramidding){
-        ord = order(api, config, op, statuses)
+        order = normalOrder(api, config, op, statuses)
       }else{Logger.log("ピラミッディング数が上限を超えるので注文しません")}// if over pyramidding then do nothing
     }else if(op=="CloseLong"){
-      ord = closeOrder(api, config, op, statuses)
+      cancelOrder = api.cancelAllOrder(config["ticker"])
+      order = closeOrder(api, config, statuses)
     }else if(op=="Sell"){
       cancelOrder = api.cancelAllOrder(config["ticker"])
-      ord = dotenOrder(api, config, op, statuses)
+      order = dotenOrder(api, config, op, statuses)
     }
   }else{
     if(op=="Buy" || op=="Sell"){
-      ord = startOrder(api, config, op, statuses)
+      Logger.log("startOrder")
+      order = startOrder(api, config, op, statuses)
     }
   }
-  return [ord, cancelOrder]
+  return [order, cancelOrder]
 }
 
 function setStatus(symbol, status){
@@ -92,7 +93,7 @@ function setStatus(symbol, status){
   for(var i=0; i < symbols.length; i++){
     if(symbols[i] == symbol){
       sheet.getRange(i + 1, 2).setValue(status["ピラミッディング数"])
-      sheet.getRange(i + 1, 2).setValue(status["orderSeriesID"])
+      sheet.getRange(i + 1, 3).setValue(status["orderSeriesID"])
     }
   }
 }
@@ -103,11 +104,15 @@ function checkGmailUpdate(){
   if(threads.length < 1){return null}
   mails = {}
   threads.forEach(function(thread){
+    try{
     thread.getMessages().forEach(function(message){
       mail = parseMessage(message.getBody())
       mails[mail["symbol"]] = mail
       message.markRead()
-    })    
+    })  
+    }catch(e){
+      chatMessage(e.name + ":" + e.message)
+    }  
   })
   return mails;
 }
@@ -117,7 +122,7 @@ function parseOperation(op){
   return ops[op]
 }
 
-function parseMessage(message, strategySymbol){
+function parseMessage(message){
   var permit = ["Long", "Short", "CloseLong", "CloseShort"]
   var regexpOp = /strategy-operation:.*?:strategy-operation/
   var regexpSymbol = /strategy-symbol:.*?:strategy-symbol/
@@ -130,8 +135,7 @@ function parseMessage(message, strategySymbol){
   operation = operation.replace(/:strategy-operation/, "");
   var symbol = symbol_part.replace(/strategy-symbol:/, "")
   symbol = symbol.replace(/:strategy-symbol/, "")
-  if(strategySymbol == symbol){return null}
-  if(permit.indexOf(operation) < 0){throw new MailError("メールのオペレーションが許可されてるものではありません。許可されているものは " + permit + "のみです")}
+  if(permit.indexOf(operation) < 0){throw new MailError(symbol + " のメールのオペレーション"+ operation +"になっていますが許可されてるものではありません。許可されているものは " + permit.toString() + "のみです")}
   return {"operation": operation, "symbol": symbol}
 }
 
@@ -139,23 +143,27 @@ function configration(){
   return getSymbolAndData("調整項目")
 }
 
-function upsertOrder(order, op, orderSeriesID, symbol){
-  Logger.log(order)
+function appendOrder(order, op, platform, orderSeriesID, symbol){
   for(var i=0; i < order.length; i++){
-    appendOrderLog(order, op, orderSeriesID, symbol)
+    appendOrderLog(order[i], op, orderSeriesID, platform, symbol)
   }
 }
 
 // ストップロスがfilledされた場合(毎分チェック用)
-function checkActiveStopLossIsFilled(config, api, orderSeriesID){
-  var stopLoss = getActiveStopLossByOrderSeries(orderSeriesID)
-  var orderIDs = stopLoss.rows.map(function(row){return row[stopLoss.columns.indexOf("オーダーID")]})
-  var currentOrders = getOrder(api, config, orderIDs)
-  return currentOrders.map(function(order){if(order["オーダーステータス"] == "Filled") return order}) 
+function checkActiveStopLossIsFilled(symbol, config, api, orderSeriesID){
+  var stopLoss = getActiveStopLossByOrderSeries(symbol, orderSeriesID)
+  if(stopLoss.rows){
+    var orderIDs = stopLoss.rows.map(function(row){return row[stopLoss.columns.indexOf("オーダーID")]})
+    var currentOrders = getOrder(api, config, orderIDs)
+    return currentOrders.map(function(order){if(order["オーダーステータス"] == "Filled") return order}) 
+  }else{
+    return []
+  }
 }
 
 function formatStopLossExecutedMessage(order, platform, strategy){
-  return "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "] Strategy " + strategy + "stopLoss is Filled " + order["side"] + "in" +  platform + "ticker" + order["ticker"] + "amount" + order["ポジションサイズ"] + "price at" + order["価格"] 
+  if(!order) return ;
+  return "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "] Strategy " + strategy + " stopLoss is Filled " + order["side"] + " in " +  platform + " ticker " + order["ticker"] + " amount " + order["ポジションサイズ"] + " price at " + order["執行価格"] 
 }
 
 function getStatus(){
@@ -163,14 +171,19 @@ function getStatus(){
 }
 
 function formatMessage(strategy, order, op, platform){
-  var obj = JSON.parse(order)
-  var symbol = obj["ticker"]
-  var orderQty = obj["ポジションサイズ"]
-  var price = obj["価格"]
-  var orderType = obj["オーダータイプ"]
+  var symbol = order["ticker"]
+  var orderQty = order["ポジションサイズ"]
+  var orderType = order["オーダータイプ"]
   var d = new Date()
-  var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy + " : " + op + " in " + platform + " ticker " + symbol + " amount " + orderQty + " price at " + price + "order type is " + orderType
-  return message
+  if(orderType == "Stop"){
+    var price = order["ストップ価格"]
+    var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy + " operation is " + op + ": Set "+ order["side"] +" Stop loss in " + platform + " ticker " + symbol + " amount " + orderQty + " trigger at " + price
+    return message
+  }else{
+    var price =order["執行価格"]
+    var message = "[" + Utilities.formatDate(d, "JST","yyyy/MM/dd hh:mm:ss") + "]" + "Strategy " + strategy +  " signal is "  + op + " : " + order["side"] + " in " + platform + " ticker " + symbol + " amount " + orderQty + " price at " + price + " order type is " + orderType
+    return message
+  }
 }
 
 

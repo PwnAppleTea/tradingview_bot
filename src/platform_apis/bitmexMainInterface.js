@@ -56,7 +56,7 @@ bitmexInterface.prototype.marketStopOrder = function(symbol, side, pegOffsetValu
     params = {"symbol": symbol, "side": side, "pegOffsetValue": pegOffsetValue, "orderQty": orderQty, "pegPriceType": "TrailingStopPeg"}
   }
   Logger.log(params)
-  var position = this.sendRequest_(params, "POST", path, 0, 100000)
+  var position = this.sendRequest_(params, "POST", path, 0)
   Logger.log(position)
   return this.parse_order(position)
 }
@@ -79,7 +79,7 @@ bitmexInterface.prototype.sendRequest_ = function(params, method, path, numResen
     "method": method, 
     "muteHttpExceptions": true
   }
-  if(method=="POST"){
+  if(method=="POST" || method=="DELETE"){
     var payload = params
     var signature = this.makeMexSignature(this.api_secret, method, nonce, path, payload);
     option["headers"]["api-signature"] = signature
@@ -132,7 +132,13 @@ bitmexInterface.prototype.hex = function(signature){
 }
 
 bitmexInterface.prototype.parse_order = function(order){
+  Logger.log(order)
   var ordOrg = JSON.parse(order)
+  return this.formatOrder(ordOrg)
+  
+}
+
+bitmexInterface.prototype.formatOrder = function(ordOrg){
   return {
     "ticker": ordOrg["symbol"],
     "side": ordOrg["side"],
@@ -150,5 +156,5 @@ bitmexInterface.prototype.parse_order = function(order){
 
 bitmexInterface.prototype.parse_orders = function(order){
   var ordOrgs = JSON.parse(order)
-  return ordOrgs.map(parse_order(ordOrg))
+  return ordOrgs.map(this.formatOrder)
 }

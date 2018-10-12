@@ -15,32 +15,37 @@ function deleteUndefinedFromArray(array){
 
 function getActiveStopLossByOrderSeries(symbol, orderSeriesID){
   var tableId = getTableIdFromName("TBOT_処理結果")
-  var sql = "SELECT orderSeriesID, 'オーダーID', '戦略シンボル' FROM "+ tableId + "WHERE 'オーダーステータス' = 'New' AND 'orderSeriesID' = " + orderSeriesID + " AND 'オーダータイプ' = 'Stop' AND '戦略シンボル' = " + symbol
+  var sql = "SELECT orderSeriesID, 'オーダーID', '戦略シンボル' FROM "+ tableId + " WHERE 'オーダーステータス' = 'New' AND 'orderSeriesID' = " + orderSeriesID + " AND 'オーダータイプ' = 'Stop' AND '戦略シンボル' = '" + symbol + "'"
   return FusionTables.Query.sqlGet(sql)
 }
 
 function appendOrderLog(order, op, orderSeriesID, platform, strategySymbol){
   var tableId = getTableIdFromName("TBOT_処理結果")
-  
-  var getSQL = "SELECT * FROM " + tableId + " LIMIT = 1"
+  var getSQL = "SELECT * FROM " + tableId + " LIMIT 1"
   var res = FusionTables.Query.sqlGet(getSQL)
-  var reducer = function(accumulator, currentValue){return accumulator + ", " + currentValue}
-  orderKeys = order.keys()
-  var row = orderSeriesID + ", " + platform + ", " + strategySymbol + ", "
+  var reducer = function(accumulator, currentValue){return accumulator + ", '" + currentValue + "'"}
+  orderKeys = Object.keys(order)
+  var row = orderSeriesID + ", '" + platform + "', '" + strategySymbol + "', "
   var orderRow = ""
-  for(var i = 0; i < orderKeys.length ; i ++){orderRow + ", " +  order[orderKeys[i]]}
-  row = row + orderRow + ", " + op
-  var insertSQL = "INSERT INTO " + tableId + res.columns().reduce(reducer) + "VALUES " + row
+  for(var i = 0; i < orderKeys.length ; i ++){orderRow += "'" + order[orderKeys[i]] + "', "}
+  row = row + orderRow + "'" + op + "'"
+  var columns  = res.columns
+  var CLUM = columns.reduce(reducer)
+  var insertSQL = "INSERT INTO " + tableId + " (" + CLUM + ") VALUES (" + row + ")"
+  Logger.log(insertSQL)
   return FusionTables.Query.sql(insertSQL)
 }
 
 function updateOrderLog(order){
-  var tableId = getTableIdFromName("TBOT_処理結果")
-  var getSQL = "SELECT ROWID FROM" +tableId+ "WHERE 'オーダーID' = " + order["オーダーID"]
-  var rowId = FusionTables.Query.sqlGet(getSQL).rows[0][0]
-  var setSQL = "UPDATE" + tableId + "SET 'オーダーステータス' = "+ order["オーダーステータス"] +", '価格' = "+ order["価格"] + " '執行価格' = " + order["執行価格"] + " '執行時刻' = "+ order["執行時刻"] +" WHERE ROWID =" + rowId
-  var response = FusionTables.Query.sqlGet(setSQL)
-  return response
+  if(order){
+    var tableId = getTableIdFromName("TBOT_処理結果")
+    var getSQL = "SELECT ROWID FROM " +tableId+ " WHERE 'オーダーID' = '" + order["オーダーID"] + "'"
+    var rowId = FusionTables.Query.sqlGet(getSQL).rows[0][0]
+    var setSQL = "UPDATE " + tableId + " SET 'オーダーステータス' = '"+ order["オーダーステータス"] +"', '価格' = '"+ order["価格"] + "', '執行価格' = '" + order["執行価格"] + "', '執行時刻' = '"+ order["執行時刻"] +"' WHERE ROWID = " + rowId
+    Logger.log(setSQL)
+    var response = FusionTables.Query.sql(setSQL)
+return response
+  }
 }
 
 function createTableIfNotExist(){
@@ -107,12 +112,12 @@ function createTableIfNotExist(){
         },
         {
           "name": "執行時刻",
-          "type": "DATE/TIME",
+          "type": "DATETIME",
           "kind": "fusiontables#column"
         },
         {
           "name": "timestamp",
-          "type": "DATE/TIME",
+          "type": "DATETIME",
           "kind": "fusiontables#column"
         },
         {
